@@ -1,0 +1,42 @@
+from datetime import date, time
+from apps.common.utils import is_inside_geofence
+from .models import Attendance
+
+
+def process_check_in(employee, lat, lng, selfie=None):
+    site = employee.site
+    geofence_ok = False
+    if site and site.lat and site.lng:
+        geofence_ok = is_inside_geofence(
+            float(lat), float(lng),
+            float(site.lat), float(site.lng),
+            site.geofence_radius,
+        )
+
+    today = date.today()
+    attendance, created = Attendance.objects.get_or_create(
+        employee=employee,
+        date=today,
+        defaults={
+            "site": site,
+            "lat": lat,
+            "lng": lng,
+            "geofence_ok": geofence_ok,
+            "selfie": selfie,
+        },
+    )
+
+    if not created:
+        return attendance, False
+
+    from datetime import datetime
+    now = datetime.now().time()
+    late_threshold = time(9, 30)
+    if geofence_ok:
+        attendance.status = "late" if now > late_threshold else "present"
+    else:
+        attendance.status = "review"
+
+    attendance.check_in_time = now
+    attendance.save()
+    return attendance, True

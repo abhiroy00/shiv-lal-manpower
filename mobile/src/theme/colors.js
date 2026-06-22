@@ -1,0 +1,17 @@
+export const colors = {
+  ink: "#0F1E3D",
+  panel: "#16294D",
+  panel2: "#1E3563",
+  saffron: "#E8821E",
+  saffronSoft: "#FCEFDD",
+  green: "#15966A",
+  greenSoft: "#E1F4EC",
+  red: "#D2453F",
+  redSoft: "#FBE6E5",
+  amber: "#C98A12",
+  muted: "#6B7793",
+  muted2: "#9AA6BF",
+  line: "#E2E7F0",
+  paper: "#F4F6FA",
+  white: "#FFFFFF",
+};

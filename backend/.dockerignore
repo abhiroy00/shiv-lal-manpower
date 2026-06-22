@@ -1,0 +1,27 @@
+# Never send these into the Docker build context
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local DB & secrets
+db.sqlite3
+.env
+.env.*
+!.env.example
+
+# Generated at build time
+staticfiles/
+media/
+
+# Tests & coverage
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# IDE
+.vscode/
+.idea/
+*.swp
