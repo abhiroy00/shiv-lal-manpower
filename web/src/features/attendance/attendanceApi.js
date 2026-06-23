@@ -10,7 +10,15 @@ export const attendanceApi = baseApi.injectEndpoints({
       query: () => "/attendance/today-summary/",
       providesTags: ["Attendance"],
     }),
+    getAttendanceRegister: build.query({
+      query: (params) => ({ url: "/attendance/register/", params }),
+      providesTags: ["Attendance"],
+    }),
   }),
 });
 
-export const { useGetAttendanceQuery, useGetTodaySummaryQuery } = attendanceApi;
+export const {
+  useGetAttendanceQuery,
+  useGetTodaySummaryQuery,
+  useGetAttendanceRegisterQuery,
+} = attendanceApi;

@@ -19,6 +19,7 @@
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./src/assets/images/adaptive-icon.png",
         "backgroundColor": "#0F1E3D"
       },
       "package": "in.shivlal.manpower",
@@ -26,7 +27,12 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCJ-pctI9aBhLlueVMsYyQtmbF70TnAEVg"
+        }
+      }
     },
     "web": {
       "bundler": "metro"

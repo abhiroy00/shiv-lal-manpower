@@ -1,97 +1,180 @@
 import { useState } from "react";
+import { useSelector } from "react-redux";
 import { useGetEmployeesQuery } from "./employeesApi";
+import EmployeeForm from "./EmployeeForm";
 
 const STATUS_COLORS = {
-  active: { bg: "#E1F4EC", color: "#15966A" },
+  active:   { bg: "#E1F4EC", color: "#15966A" },
   on_leave: { bg: "#FBF1DC", color: "#C98A12" },
   inactive: { bg: "#FBE6E5", color: "#D2453F" },
 };
 
-export default function EmployeeListPage() {
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const { data, isLoading } = useGetEmployeesQuery({ search, status: status || undefined });
+const PAGE_SIZE = 20;
 
-  const employees = data?.results || [];
+export default function EmployeeListPage() {
+  const [search, setSearch]             = useState("");
+  const [status, setStatus]             = useState("");
+  const [page, setPage]                 = useState(1);
+  const [formEmployee, setFormEmployee] = useState(null); // null=closed, {}=add, obj=edit
+
+  const { data, isLoading } = useGetEmployeesQuery({
+    search, status: status || undefined, page, page_size: PAGE_SIZE,
+  });
+
+  const employees  = data?.results || [];
+  const totalPages = data?.count ? Math.ceil(data.count / PAGE_SIZE) : 1;
+
+  const accessToken = useSelector((s) => s.auth.accessToken);
+  const [exporting, setExporting] = useState(false);
+
+  const openAdd   = ()    => setFormEmployee({});
+  const openEdit  = (emp) => setFormEmployee(emp);
+  const closeForm = ()    => setFormEmployee(null);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      if (status) params.set("status", status);
+
+      const res = await fetch(`/api/employees/export/?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error("Export failed");
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `employees_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleSearch = (e) => { setSearch(e.target.value); setPage(1); };
+  const handleStatus = (e) => { setStatus(e.target.value); setPage(1); };
 
   return (
-    <div>
-      <div style={S.pageHead}>
-        <div>
-          <h1 style={S.h1}>Employee Database</h1>
-          <p style={S.sub}>Central record of all deployed manpower</p>
-        </div>
-        <div style={S.actions}>
-          <button style={S.btn}>📥 Import Excel</button>
-          <button style={S.btnSolid}>+ Add Employee</button>
-        </div>
-      </div>
+    <>
+      <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
 
-      <div style={S.toolbar}>
-        <input
-          style={S.searchInput}
-          placeholder="Search by name / ID…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select style={S.select} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All Status</option>
-          <option value="active">Active</option>
-          <option value="on_leave">On Leave</option>
-          <option value="inactive">Inactive</option>
-        </select>
-      </div>
+      <div>
+        <div style={S.pageHead}>
+          <div>
+            <h1 style={S.h1}>Employee Database</h1>
+            <p style={S.sub}>Central record of all deployed manpower</p>
+          </div>
+          <div style={S.actions}>
+            <button style={S.btn} onClick={handleExport} disabled={exporting}>
+            {exporting ? "Exporting…" : "📥 Export Excel"}
+          </button>
+            <button style={S.btnSolid} onClick={openAdd}>+ Add Employee</button>
+          </div>
+        </div>
 
-      <div style={S.card}>
-        <table style={S.table}>
-          <thead>
-            <tr>
-              {["Employee", "Designation", "Site", "Phone", "Joined", "Status", ""].map((h) => (
-                <th key={h} style={S.th}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && (
-              <tr><td colSpan={7} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>Loading…</td></tr>
-            )}
-            {employees.map((emp) => {
-              const sc = STATUS_COLORS[emp.status] || STATUS_COLORS.inactive;
-              return (
-                <tr key={emp.id} style={S.tr}>
-                  <td style={S.td}>
-                    <div style={S.empCell}>
-                      <div style={S.av}>{emp.full_name.slice(0, 2).toUpperCase()}</div>
-                      <div>
-                        <div style={S.empName}>{emp.full_name}</div>
-                        <div style={S.empCode}>{emp.emp_code}</div>
+        <div style={S.toolbar}>
+          <input
+            style={S.searchInput}
+            placeholder="Search by name / ID…"
+            value={search}
+            onChange={handleSearch}
+          />
+          <select style={S.select} value={status} onChange={handleStatus}>
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="on_leave">On Leave</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+
+        <div style={S.card}>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                {["Employee", "Designation", "Site", "Phone", "Joined", "Status", ""].map((h) => (
+                  <th key={h} style={S.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading && (
+                <tr><td colSpan={7} style={S.empty}>Loading…</td></tr>
+              )}
+              {employees.map((emp) => {
+                const sc = STATUS_COLORS[emp.status] || STATUS_COLORS.inactive;
+                return (
+                  <tr key={emp.id} style={S.tr} onClick={() => openEdit(emp)}>
+                    <td style={S.td}>
+                      <div style={S.empCell}>
+                        <div style={S.av}>{emp.full_name.slice(0, 2).toUpperCase()}</div>
+                        <div>
+                          <div style={S.empName}>{emp.full_name}</div>
+                          <div style={S.empCode}>{emp.emp_code}</div>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td style={S.td}>{emp.designation}</td>
-                  <td style={S.td}>{emp.site_name || "—"}</td>
-                  <td style={S.td}>{emp.phone}</td>
-                  <td style={S.td}>{emp.date_joined}</td>
-                  <td style={S.td}>
-                    <span style={{ ...S.pill, background: sc.bg, color: sc.color }}>
-                      {emp.status.replace("_", " ")}
-                    </span>
-                  </td>
-                  <td style={S.td}><span style={S.link}>View</span></td>
-                </tr>
-              );
-            })}
-            {!isLoading && employees.length === 0 && (
-              <tr><td colSpan={7} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>No employees found</td></tr>
-            )}
-          </tbody>
-        </table>
+                    </td>
+                    <td style={S.td}>{emp.designation}</td>
+                    <td style={S.td}>{emp.site_name || "—"}</td>
+                    <td style={S.td}>{emp.phone}</td>
+                    <td style={S.td}>{emp.date_joined}</td>
+                    <td style={S.td}>
+                      <span style={{ ...S.pill, background: sc.bg, color: sc.color }}>
+                        {emp.status.replace("_", " ")}
+                      </span>
+                    </td>
+                    <td style={S.td}>
+                      <span style={S.link} onClick={(e) => { e.stopPropagation(); openEdit(emp); }}>
+                        Edit
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!isLoading && employees.length === 0 && (
+                <tr><td colSpan={7} style={S.empty}>No employees found</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {data?.count > 0 && (
+          <div style={S.pagination}>
+            <span style={S.pgInfo}>
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, data.count)} of {data.count}
+            </span>
+            <div style={S.pgButtons}>
+              <button style={S.pgBtn} disabled={page === 1} onClick={() => setPage(page - 1)}>← Prev</button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let p = page <= 3 ? i + 1
+                      : page >= totalPages - 2 ? totalPages - 4 + i
+                      : page - 2 + i;
+                p = Math.max(1, Math.min(totalPages, p));
+                return (
+                  <button
+                    key={p}
+                    style={{ ...S.pgBtn, ...(p === page ? S.pgBtnOn : {}) }}
+                    onClick={() => setPage(p)}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+              <button style={S.pgBtn} disabled={page === totalPages} onClick={() => setPage(page + 1)}>Next →</button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {data?.count > 0 && (
-        <div style={S.note}>Showing {employees.length} of {data.count} records</div>
+      {formEmployee !== null && (
+        <EmployeeForm employee={formEmployee} onClose={closeForm} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -108,7 +191,7 @@ const S = {
   card: { background: "#fff", border: "1px solid #E2E7F0", borderRadius: 14, overflow: "auto" },
   table: { width: "100%", borderCollapse: "collapse", minWidth: 680 },
   th: { fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em", color: "#6B7793", textAlign: "left", padding: "11px 14px", borderBottom: "1px solid #E2E7F0", fontWeight: 700, background: "#F4F6FA" },
-  tr: {},
+  tr: { cursor: "pointer" },
   td: { padding: "12px 14px", fontSize: 13, borderBottom: "1px solid #E2E7F0", color: "#1B2540" },
   empCell: { display: "flex", alignItems: "center", gap: 10 },
   av: { width: 32, height: 32, borderRadius: 8, background: "#1E3563", color: "#fff", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 },
@@ -116,5 +199,10 @@ const S = {
   empCode: { fontSize: 11, color: "#6B7793" },
   pill: { display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 30, fontSize: 11.5, fontWeight: 600 },
   link: { color: "#E8821E", fontWeight: 600, cursor: "pointer", fontSize: 12.5 },
-  note: { fontSize: 12, color: "#8a5310", background: "#FCEFDD", border: "1px solid #f2d9b8", borderRadius: 10, padding: "11px 14px", marginTop: 14 },
+  empty: { textAlign: "center", padding: 32, color: "#6B7793" },
+  pagination: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", gap: 8 },
+  pgInfo: { fontSize: 12.5, color: "#6B7793" },
+  pgButtons: { display: "flex", gap: 4 },
+  pgBtn: { padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E7F0", background: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "inherit", color: "#1B2540" },
+  pgBtnOn: { background: "#E8821E", color: "#fff", border: "1px solid #E8821E", fontWeight: 700 },
 };

@@ -1,3 +1,5 @@
+import io
+import calendar
 from datetime import date
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -5,10 +7,81 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Attendance
-from .serializers import AttendanceSerializer, CheckInSerializer
+from django.http import HttpResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+from django.utils import timezone
+from .models import Attendance, LeaveRequest
+from .serializers import AttendanceSerializer, CheckInSerializer, LeaveRequestSerializer
 from .services import process_check_in
 from apps.employees.models import Employee
+
+
+def _build_register(year, month, site_id=None, district_id=None, search=None):
+    """
+    Returns (days_in_month, sundays_set, employee_rows_list).
+    employee_rows_list items:
+        { emp, days: {day_no: code}, present, late, absent, sunday, working_days }
+    code: P=present, L=late, R=review, A=absent, S=sunday
+    """
+    days_in_month = calendar.monthrange(year, month)[1]
+    sundays = {
+        d for d in range(1, days_in_month + 1)
+        if date(year, month, d).weekday() == 6
+    }
+
+    emp_qs = Employee.objects.select_related("site__district__state").exclude(status="inactive")
+    if site_id:
+        emp_qs = emp_qs.filter(site_id=site_id)
+    elif district_id:
+        emp_qs = emp_qs.filter(site__district_id=district_id)
+    if search:
+        emp_qs = emp_qs.filter(full_name__icontains=search) | emp_qs.filter(emp_code__icontains=search)
+
+    emp_ids = list(emp_qs.values_list("id", flat=True))
+
+    att_qs = Attendance.objects.filter(
+        employee_id__in=emp_ids,
+        date__year=year,
+        date__month=month,
+    ).values("employee_id", "date", "status")
+
+    att_map = {}  # {emp_id: {day: code}}
+    for row in att_qs:
+        emp_id  = row["employee_id"]
+        day     = row["date"].day
+        code    = {"present": "P", "late": "L", "review": "R"}.get(row["status"], "P")
+        att_map.setdefault(emp_id, {})[day] = code
+
+    rows = []
+    for emp in emp_qs:
+        days = {}
+        present = late = review = 0
+        for d in range(1, days_in_month + 1):
+            if d in sundays:
+                days[d] = "S"
+            elif d in att_map.get(emp.id, {}):
+                code = att_map[emp.id][d]
+                days[d] = code
+                if code == "P":   present += 1
+                elif code == "L": late    += 1
+                elif code == "R": review  += 1
+            else:
+                days[d] = "A"
+        working_days = days_in_month - len(sundays)
+        absent = working_days - present - late - review
+        rows.append({
+            "emp": emp,
+            "days": days,
+            "present": present,
+            "late": late,
+            "review": review,
+            "absent": absent,
+            "working_days": working_days,
+        })
+
+    return days_in_month, sundays, rows
 
 
 class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
@@ -17,6 +90,179 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["employee", "date", "status", "site"]
+
+    @action(detail=False, methods=["get"], url_path="register")
+    def register(self, request):
+        today = date.today()
+        year  = int(request.query_params.get("year",  today.year))
+        month = int(request.query_params.get("month", today.month))
+        site_id     = request.query_params.get("site")
+        district_id = request.query_params.get("district")
+        search      = request.query_params.get("search")
+
+        days_in_month, sundays, rows = _build_register(year, month, site_id, district_id, search)
+
+        employees = []
+        for r in rows:
+            emp = r["emp"]
+            employees.append({
+                "id":          emp.id,
+                "emp_code":    emp.emp_code,
+                "full_name":   emp.full_name,
+                "designation": emp.designation,
+                "site_name":   emp.site.name if emp.site else "",
+                "days":        r["days"],
+                "present":     r["present"],
+                "late":        r["late"],
+                "review":      r["review"],
+                "absent":      r["absent"],
+                "working_days": r["working_days"],
+            })
+
+        return Response({
+            "year":          year,
+            "month":         month,
+            "days_in_month": days_in_month,
+            "sundays":       sorted(sundays),
+            "employees":     employees,
+        })
+
+    @action(detail=False, methods=["get"], url_path="register/export")
+    def register_export(self, request):
+        today = date.today()
+        year  = int(request.query_params.get("year",  today.year))
+        month = int(request.query_params.get("month", today.month))
+        site_id     = request.query_params.get("site")
+        district_id = request.query_params.get("district")
+
+        days_in_month, sundays, rows = _build_register(year, month, site_id, district_id)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Attendance Register"
+
+        # ── Styles ──────────────────────────────────────────────
+        thin       = Side(style="thin", color="C0C8D8")
+        bdr        = Border(left=thin, right=thin, top=thin, bottom=thin)
+        ctr        = Alignment(horizontal="center", vertical="center")
+        navy_fill  = PatternFill("solid", fgColor="1E3563")
+        navy_font  = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
+        sun_fill   = PatternFill("solid", fgColor="FBE6E5")
+        sun_font   = Font(name="Calibri", color="C0392B", bold=True, size=9)
+        p_fill     = PatternFill("solid", fgColor="E1F4EC")
+        a_fill     = PatternFill("solid", fgColor="FBE6E5")
+        l_fill     = PatternFill("solid", fgColor="FBF1DC")
+        r_fill     = PatternFill("solid", fgColor="EDE7F6")
+        hdr_fill   = PatternFill("solid", fgColor="F4F6FA")
+        hdr_font   = Font(name="Calibri", bold=True, size=9, color="1E3563")
+        tot_font   = Font(name="Calibri", bold=True, size=9)
+        cell_font  = Font(name="Calibri", size=9)
+
+        month_name = calendar.month_name[month]
+
+        # Title
+        total_cols = 5 + days_in_month + 5
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
+        title = ws.cell(row=1, column=1,
+            value=f"ATTENDANCE REGISTER – {month_name.upper()} {year}")
+        title.font = Font(name="Calibri", bold=True, size=14, color="1E3563")
+        title.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[1].height = 28
+
+        # Column headers
+        FIXED_COLS = ["Sr", "Emp Code", "Name", "Designation", "Site"]
+        TOTAL_COLS = ["P", "L", "R", "A", "W/D"]
+        TOTAL_LABELS = ["Present", "Late", "Review", "Absent", "Working Days"]
+
+        ws.row_dimensions[2].height = 22
+        for ci, label in enumerate(FIXED_COLS, start=1):
+            c = ws.cell(row=2, column=ci, value=label)
+            c.font = navy_font; c.fill = navy_fill; c.alignment = ctr; c.border = bdr
+
+        for d in range(1, days_in_month + 1):
+            col = d + len(FIXED_COLS)
+            day_date = date(year, month, d)
+            label = f"{d}\n{day_date.strftime('%a')[:2]}"
+            c = ws.cell(row=2, column=col, value=label)
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            c.border = bdr
+            if d in sundays:
+                c.font = sun_font; c.fill = sun_fill
+            else:
+                c.font = navy_font; c.fill = navy_fill
+
+        for ti, (short, long) in enumerate(zip(TOTAL_COLS, TOTAL_LABELS)):
+            col = len(FIXED_COLS) + days_in_month + 1 + ti
+            c = ws.cell(row=2, column=col, value=short)
+            c.font = navy_font; c.fill = navy_fill; c.alignment = ctr; c.border = bdr
+            ws.column_dimensions[get_column_letter(col)].width = 5
+
+        # Column widths
+        ws.column_dimensions["A"].width = 5
+        ws.column_dimensions["B"].width = 11
+        ws.column_dimensions["C"].width = 20
+        ws.column_dimensions["D"].width = 17
+        ws.column_dimensions["E"].width = 18
+        for d in range(1, days_in_month + 1):
+            ws.column_dimensions[get_column_letter(d + len(FIXED_COLS))].width = 3.5
+
+        CODE_FILLS = {"P": p_fill, "A": a_fill, "L": l_fill, "R": r_fill}
+        CODE_FONTS = {
+            "P": Font(name="Calibri", bold=True, size=8, color="15966A"),
+            "A": Font(name="Calibri", bold=True, size=8, color="C0392B"),
+            "L": Font(name="Calibri", bold=True, size=8, color="C98A12"),
+            "R": Font(name="Calibri", bold=True, size=8, color="7B1FA2"),
+            "S": Font(name="Calibri", bold=True, size=8, color="C0392B"),
+        }
+
+        for ri, row in enumerate(rows, start=3):
+            emp = row["emp"]
+            alt = (ri % 2 == 0)
+            row_bg = PatternFill("solid", fgColor="F4F6FA") if alt else None
+
+            for ci, val in enumerate([ri - 2, emp.emp_code, emp.full_name,
+                                       emp.designation, emp.site.name if emp.site else ""], start=1):
+                c = ws.cell(row=ri, column=ci, value=val)
+                c.font = cell_font; c.border = bdr
+                if alt and ci > 1: c.fill = row_bg
+                if ci == 1: c.alignment = ctr
+
+            for d in range(1, days_in_month + 1):
+                code = row["days"].get(d, "A")
+                col  = d + len(FIXED_COLS)
+                c = ws.cell(row=ri, column=col, value=code)
+                c.alignment = ctr; c.border = bdr
+                c.font = CODE_FONTS.get(code, cell_font)
+                if code in CODE_FILLS:
+                    c.fill = CODE_FILLS[code]
+                elif code == "S":
+                    c.fill = sun_fill
+
+            for ti, key in enumerate(["present", "late", "review", "absent", "working_days"]):
+                col = len(FIXED_COLS) + days_in_month + 1 + ti
+                c = ws.cell(row=ri, column=col, value=row[key])
+                c.font = tot_font; c.alignment = ctr; c.border = bdr
+                if alt: c.fill = row_bg
+
+        # Legend
+        legend_row = len(rows) + 4
+        ws.cell(row=legend_row, column=1, value="Legend:").font = Font(bold=True, size=9)
+        for li, (code, desc) in enumerate([("P","Present"), ("L","Late"), ("R","Under Review"), ("A","Absent"), ("S","Sunday")]):
+            col = 2 + li
+            c = ws.cell(row=legend_row, column=col, value=f"{code}={desc}")
+            c.font = CODE_FONTS.get(code, Font(size=9))
+
+        ws.freeze_panes = "F3"
+
+        buf = io.BytesIO()
+        wb.save(buf); buf.seek(0)
+        fname = f"attendance_register_{year}_{month:02d}.xlsx"
+        response = HttpResponse(
+            buf.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{fname}"'
+        return response
 
 
 class CheckInView(APIView):
@@ -59,3 +305,180 @@ class TodaySummaryView(APIView):
             "absent": absent,
             "under_review": review,
         })
+
+
+class MyTodayView(APIView):
+    """Employee: today's check-in status."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            emp = request.user.employee
+        except Exception:
+            return Response({"detail": "No employee linked."}, status=400)
+        today = date.today()
+        try:
+            att = Attendance.objects.get(employee=emp, date=today)
+            return Response({
+                "checked_in":      True,
+                "check_in_time":   att.check_in_time,
+                "check_out_time":  att.check_out_time,
+                "status":          att.status,
+                "geofence_ok":     att.geofence_ok,
+            })
+        except Attendance.DoesNotExist:
+            return Response({"checked_in": False, "check_in_time": None,
+                             "check_out_time": None, "status": None})
+
+
+class CheckOutView(APIView):
+    """Employee: mark check-out for today."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            emp = request.user.employee
+        except Exception:
+            return Response({"detail": "No employee linked."}, status=400)
+        today = date.today()
+        try:
+            att = Attendance.objects.get(employee=emp, date=today)
+        except Attendance.DoesNotExist:
+            return Response({"detail": "No check-in found for today."}, status=400)
+        if att.check_out_time:
+            return Response({"detail": "Already checked out."}, status=400)
+        att.check_out_time = timezone.localtime(timezone.now()).time()
+        att.save()
+        return Response(AttendanceSerializer(att).data)
+
+
+class MyAttendanceView(APIView):
+    """Employee: own attendance for a given month/year."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            emp = request.user.employee
+        except Exception:
+            return Response({"detail": "No employee linked."}, status=400)
+        today  = date.today()
+        year   = int(request.query_params.get("year",  today.year))
+        month  = int(request.query_params.get("month", today.month))
+        import calendar as cal
+        days_in_month = cal.monthrange(year, month)[1]
+        sundays = {d for d in range(1, days_in_month + 1) if date(year, month, d).weekday() == 6}
+
+        atts = Attendance.objects.filter(employee=emp, date__year=year, date__month=month).order_by("date")
+        att_map = {a.date.day: a for a in atts}
+
+        days = []
+        present = late = absent = leave_days = 0
+        for d in range(1, days_in_month + 1):
+            if d in sundays:
+                days.append({"day": d, "code": "S", "status": "sunday"})
+            elif d in att_map:
+                a = att_map[d]
+                code = {"present": "P", "late": "L", "review": "R"}.get(a.status, "P")
+                if code == "P": present += 1
+                elif code == "L": late += 1
+                days.append({
+                    "day": d, "code": code, "status": a.status,
+                    "check_in_time":  str(a.check_in_time)  if a.check_in_time  else None,
+                    "check_out_time": str(a.check_out_time) if a.check_out_time else None,
+                })
+            elif date(year, month, d) > today:
+                days.append({"day": d, "code": "", "status": "future"})
+            else:
+                # check if leave approved
+                on_leave = LeaveRequest.objects.filter(
+                    employee=emp, status="approved",
+                    from_date__lte=date(year, month, d),
+                    to_date__gte=date(year, month, d),
+                ).exists()
+                if on_leave:
+                    days.append({"day": d, "code": "LE", "status": "leave"})
+                    leave_days += 1
+                else:
+                    days.append({"day": d, "code": "A", "status": "absent"})
+                    absent += 1
+        working_days = days_in_month - len(sundays)
+        return Response({
+            "year": year, "month": month, "days_in_month": days_in_month,
+            "days": days,
+            "summary": {"present": present, "late": late, "absent": absent,
+                        "leave": leave_days, "working_days": working_days},
+        })
+
+
+class AttendanceMapView(APIView):
+    """Return check-in locations for a given date (for map display)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        target_date = request.query_params.get("date", str(date.today()))
+        site_id     = request.query_params.get("site")
+        qs = Attendance.objects.select_related("employee__site").filter(
+            date=target_date,
+            lat__isnull=False,
+            lng__isnull=False,
+        )
+        if site_id:
+            qs = qs.filter(employee__site_id=site_id)
+        data = []
+        for a in qs:
+            data.append({
+                "id":           a.id,
+                "emp_code":     a.employee.emp_code,
+                "full_name":    a.employee.full_name,
+                "designation":  a.employee.designation,
+                "site_name":    a.employee.site.name if a.employee.site else None,
+                "lat":          float(a.lat),
+                "lng":          float(a.lng),
+                "check_in_time": str(a.check_in_time) if a.check_in_time else None,
+                "check_out_time":str(a.check_out_time) if a.check_out_time else None,
+                "status":       a.status,
+                "geofence_ok":  a.geofence_ok,
+            })
+        return Response({"date": target_date, "count": len(data), "records": data})
+
+
+class LeaveRequestViewSet(viewsets.ModelViewSet):
+    serializer_class   = LeaveRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role in ("admin", "hr"):
+            return LeaveRequest.objects.select_related("employee", "reviewed_by").all()
+        try:
+            return LeaveRequest.objects.filter(employee=user.employee)
+        except Exception:
+            return LeaveRequest.objects.none()
+
+    def perform_create(self, serializer):
+        try:
+            emp = self.request.user.employee
+        except Exception:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("No employee linked to your account.")
+        serializer.save(employee=emp)
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        leave = self.get_object()
+        leave.status      = "approved"
+        leave.reviewed_by = request.user
+        leave.reviewed_at = timezone.now()
+        leave.review_note = request.data.get("note", "")
+        leave.save()
+        return Response(LeaveRequestSerializer(leave).data)
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        leave = self.get_object()
+        leave.status      = "rejected"
+        leave.reviewed_by = request.user
+        leave.reviewed_at = timezone.now()
+        leave.review_note = request.data.get("note", "")
+        leave.save()
+        return Response(LeaveRequestSerializer(leave).data)

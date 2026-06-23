@@ -8,6 +8,7 @@ export const NAV = [
     items: [
       { label: "Employee Database", path: "/employees", icon: "👥" },
       { label: "Attendance", path: "/attendance", icon: "✅" },
+      { label: "Attendance Register", path: "/attendance/register", icon: "📋" },
       { label: "Recruitment", path: "/recruitment", icon: "🔍" },
     ],
   },

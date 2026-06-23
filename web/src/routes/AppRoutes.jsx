@@ -5,6 +5,7 @@ import ProtectedRoute from "./ProtectedRoute";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import EmployeeListPage from "../features/employees/EmployeeListPage";
 import AttendancePage from "../features/attendance/AttendancePage";
+import AttendanceRegisterPage from "../features/attendance/AttendanceRegisterPage";
 import PayrollPage from "../features/payroll/PayrollPage";
 import CompliancePage from "../features/compliance/CompliancePage";
 import PayslipPage from "../features/payslip/PayslipPage";
@@ -22,6 +23,7 @@ const AppRoutes = [
       { path: "dashboard", element: <DashboardPage /> },
       { path: "employees", element: <EmployeeListPage /> },
       { path: "attendance", element: <AttendancePage /> },
+      { path: "attendance/register", element: <AttendanceRegisterPage /> },
       { path: "payroll", element: <PayrollPage /> },
       { path: "compliance", element: <CompliancePage /> },
       { path: "payslip", element: <PayslipPage /> },

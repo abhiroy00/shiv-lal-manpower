@@ -6,13 +6,16 @@ export const authApi = baseApi.injectEndpoints({
     login: build.mutation({
       query: (body) => ({ url: "/auth/token/", method: "POST", body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        const { data } = await queryFulfilled;
-        // fetch user profile after login
-        const meRes = await fetch("/api/auth/me/", {
-          headers: { Authorization: `Bearer ${data.access}` },
-        });
-        const user = await meRes.json();
-        dispatch(setCredentials({ accessToken: data.access, refreshToken: data.refresh, user }));
+        try {
+          const { data } = await queryFulfilled;
+          const meRes = await fetch("/api/auth/me/", {
+            headers: { Authorization: `Bearer ${data.access}` },
+          });
+          const user = await meRes.json();
+          dispatch(setCredentials({ accessToken: data.access, refreshToken: data.refresh, user }));
+        } catch {
+          // login mutation's own error state handles the UI
+        }
       },
     }),
     getMe: build.query({

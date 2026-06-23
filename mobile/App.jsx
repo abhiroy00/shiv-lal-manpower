@@ -1,38 +1,67 @@
 import React from "react";
+console.error("=== APP LOADED BUILD v2 ===");
 import { Provider, useSelector } from "react-redux";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Text } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { store } from "./src/app/store";
-import LoginScreen from "./src/features/auth/LoginScreen";
-import CheckInScreen from "./src/features/attendance/CheckInScreen";
+import { store } from "./src/store/store";
 import { colors } from "./src/theme/colors";
 
+import LoginScreen      from "./src/features/auth/LoginScreen";
+import HomeScreen       from "./src/features/home/HomeScreen";
+import AttendanceScreen from "./src/features/attendance/AttendanceScreen";
+import HistoryScreen    from "./src/features/attendance/HistoryScreen";
+import PayslipScreen    from "./src/features/payslip/PayslipScreen";
+import LeaveScreen      from "./src/features/leave/LeaveScreen";
+import ProfileScreen    from "./src/features/profile/ProfileScreen";
+
+// Register RTK Query endpoint slices
+import "./src/features/attendance/attendanceApi";
+import "./src/features/payslip/payslipApi";
+import "./src/features/leave/leaveApi";
+
 const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
+const Tab   = createBottomTabNavigator();
+
+const TABS = [
+  { name: "Home",       component: HomeScreen,       icon: "🏠", title: "Home",             headerTitle: "Shiv Lal Manpower" },
+  { name: "Attendance", component: AttendanceScreen, icon: "📸", title: "Check In / Out"    },
+  { name: "History",    component: HistoryScreen,    icon: "📅", title: "Attendance History" },
+  { name: "Payslips",   component: PayslipScreen,    icon: "💰", title: "My Payslips",      headerShown: false },
+  { name: "Leave",      component: LeaveScreen,      icon: "🏖️", title: "Leave",            headerShown: false },
+  { name: "Profile",    component: ProfileScreen,    icon: "👤", title: "My Profile"        },
+];
 
 function AppTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: colors.saffron,
+        tabBarActiveTintColor:   colors.saffron,
         tabBarInactiveTintColor: colors.muted,
-        headerStyle: { backgroundColor: colors.ink },
-        headerTintColor: "#fff",
-        headerTitleStyle: { fontWeight: "700" },
+        tabBarStyle:             { backgroundColor: "#fff", borderTopColor: "#E2E7F0", height: 60, paddingBottom: 5 },
+        tabBarLabelStyle:        { fontSize: 10, fontWeight: "600" },
+        headerStyle:             { backgroundColor: colors.ink },
+        headerTintColor:         "#fff",
+        headerTitleStyle:        { fontWeight: "700" },
       }}
     >
-      <Tab.Screen
-        name="Attendance"
-        component={CheckInScreen}
-        options={{
-          title: "Attendance",
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>✅</Text>,
-          headerShown: false,
-        }}
-      />
+      {TABS.map((t) => (
+        <Tab.Screen
+          key={t.name}
+          name={t.name}
+          component={t.component}
+          options={{
+            title:        t.title,
+            headerTitle:  t.headerTitle || t.title,
+            headerShown:  t.headerShown !== false,
+            tabBarIcon:   ({ color }) => (
+              <Text style={{ fontSize: 20, color }}>{t.icon}</Text>
+            ),
+          }}
+        />
+      ))}
     </Tab.Navigator>
   );
 }

@@ -12,7 +12,7 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await login({ username: phone, password }).unwrap();
+      await login({ phone, password }).unwrap();
       navigate("/dashboard");
     } catch {}
   };

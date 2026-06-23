@@ -1,10 +1,18 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { Mutex } from "async-mutex";
 import { getTokens, saveTokens, clearTokens } from "../services/storage";
 import { logout, setCredentials } from "../features/auth/authSlice";
 
-const API_URL = "http://10.0.2.2:8000/api";
-const mutex = new Mutex();
+// apna PC ka IP yahan dalo (ipconfig se dekho)
+const API_URL = "http://192.168.101.6:8000/api";
+
+// Simple mutex — async-mutex ki jagah (private fields problem avoid karta hai)
+let isRefreshing = false;
+let pendingQueue = [];
+
+function processQueue(error, token = null) {
+  pendingQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token)));
+  pendingQueue = [];
+}
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: API_URL,
@@ -16,12 +24,11 @@ const rawBaseQuery = fetchBaseQuery({
 });
 
 const baseQueryWithReauth = async (args, api, extra) => {
-  await mutex.waitForUnlock();
   let result = await rawBaseQuery(args, api, extra);
 
   if (result.error?.status === 401) {
-    if (!mutex.isLocked()) {
-      const release = await mutex.acquire();
+    if (!isRefreshing) {
+      isRefreshing = true;
       try {
         const { refresh } = await getTokens();
         const refreshRes = await rawBaseQuery(
@@ -32,16 +39,25 @@ const baseQueryWithReauth = async (args, api, extra) => {
         if (refreshRes.data) {
           await saveTokens(refreshRes.data.access, refresh);
           api.dispatch(setCredentials({ accessToken: refreshRes.data.access }));
+          processQueue(null, refreshRes.data.access);
           result = await rawBaseQuery(args, api, extra);
         } else {
+          processQueue(new Error("Refresh failed"));
           await clearTokens();
           api.dispatch(logout());
         }
+      } catch (err) {
+        processQueue(err);
+        await clearTokens();
+        api.dispatch(logout());
       } finally {
-        release();
+        isRefreshing = false;
       }
     } else {
-      await mutex.waitForUnlock();
+      // Wait for ongoing refresh
+      await new Promise((resolve, reject) =>
+        pendingQueue.push({ resolve, reject })
+      );
       result = await rawBaseQuery(args, api, extra);
     }
   }
@@ -50,7 +66,9 @@ const baseQueryWithReauth = async (args, api, extra) => {
 
 export const baseApi = createApi({
   reducerPath: "api",
-  baseQuery: baseQueryWithReauth,
-  tagTypes: ["Attendance", "Payslip", "User"],
-  endpoints: () => ({}),
+  baseQuery:   baseQueryWithReauth,
+  tagTypes:    ["Attendance", "Payslip", "Leave", "User"],
+  endpoints:   () => ({}),
 });
+
+export { API_URL };
