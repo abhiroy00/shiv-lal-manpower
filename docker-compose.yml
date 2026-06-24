@@ -61,8 +61,8 @@ services:
   api:
     build: ./backend
     command: >
-      sh -c "python manage.py migrate --noinput &&
-             python manage.py runserver 0.0.0.0:8000"
+      sh -c "uv run python manage.py migrate --noinput &&
+             uv run python manage.py runserver 0.0.0.0:8000"
     restart: unless-stopped
     volumes:
       - ./backend:/app
@@ -79,7 +79,7 @@ services:
   # ── Celery Worker ──────────────────────────────────────────────────────────
   celery:
     build: ./backend
-    command: celery -A config worker -l info -Q celery
+    command: uv run celery -A config worker -l info -Q celery
     restart: unless-stopped
     volumes:
       - ./backend:/app
@@ -94,7 +94,7 @@ services:
   # ── Celery Beat (scheduled tasks) ──────────────────────────────────────────
   celery-beat:
     build: ./backend
-    command: celery -A config beat -l info
+    command: uv run celery -A config beat -l info
     restart: unless-stopped
     volumes:
       - ./backend:/app
