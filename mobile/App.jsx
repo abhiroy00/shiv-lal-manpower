@@ -5,7 +5,7 @@ import { Provider, useDispatch, useSelector } from "react-redux";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
 import { store } from "./src/store/store";
@@ -33,6 +33,7 @@ const TABS = [
 ];
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => {
@@ -42,9 +43,9 @@ function MainTabs() {
           tabBarStyle: {
             backgroundColor: "#0F1E3D",
             borderTopWidth: 0,
-            height: 62,
+            height: 62 + insets.bottom,
             paddingTop: 8,
-            paddingBottom: 8,
+            paddingBottom: 8 + insets.bottom,
             elevation: 20,
             shadowColor: "#000",
             shadowOpacity: 0.3,

@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import {
   useMyLeavesQuery,
   useLeaveBalanceQuery,
@@ -328,6 +329,7 @@ function LeaveCard({ leave, onCancel }) {
 
 export default function LeaveScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const [tab, setTab] = useState("apply");
 
   const { data: leaves,  isLoading: leavesLoading, refetch, isFetching } = useMyLeavesQuery();
@@ -383,7 +385,7 @@ export default function LeaveScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={S.scrollContent}
+        contentContainerStyle={[S.scrollContent, { paddingBottom: tabBarHeight + 16 }]}
         refreshControl={
           tab === "history"
             ? <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={colors.saffron} />
@@ -432,7 +434,7 @@ const S = StyleSheet.create({
   tabActive:   { borderBottomWidth: 2.5, borderBottomColor: colors.saffron },
   tabTxt:      { color: "rgba(255,255,255,.45)", fontSize: 13, fontWeight: "700" },
   tabTxtActive:{ color: "#fff" },
-  scrollContent:{ padding: 16, paddingBottom: 40 },
+  scrollContent:{ padding: 16 },
   empty:       { alignItems: "center", paddingTop: 60, gap: 8 },
   emptyTitle:  { fontSize: 16, fontWeight: "700", color: colors.ink },
   emptySub:    { fontSize: 13, color: colors.muted },
