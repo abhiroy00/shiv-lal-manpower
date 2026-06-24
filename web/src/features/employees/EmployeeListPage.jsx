@@ -115,7 +115,12 @@ export default function EmployeeListPage() {
                         <div style={S.av}>{emp.full_name.slice(0, 2).toUpperCase()}</div>
                         <div>
                           <div style={S.empName}>{emp.full_name}</div>
-                          <div style={S.empCode}>{emp.emp_code}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={S.empCode}>{emp.emp_code}</span>
+                            {emp.has_login && (
+                              <span style={S.loginBadge}>🔐 App</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -199,6 +204,7 @@ const S = {
   empCode: { fontSize: 11, color: "#6B7793" },
   pill: { display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 30, fontSize: 11.5, fontWeight: 600 },
   link: { color: "#E8821E", fontWeight: 600, cursor: "pointer", fontSize: 12.5 },
+  loginBadge: { fontSize: 10, fontWeight: 700, color: "#1E3563", background: "#D9E3F7", borderRadius: 4, padding: "1px 5px" },
   empty: { textAlign: "center", padding: 32, color: "#6B7793" },
   pagination: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", gap: 8 },
   pgInfo: { fontSize: 12.5, color: "#6B7793" },

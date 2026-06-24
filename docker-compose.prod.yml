@@ -1,0 +1,98 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Shiv Lal Manpower Portal – Docker Compose (production)
+#
+#  Prerequisites on the server:
+#    1. Copy .env.prod.example to .env.prod and fill in all values.
+#    2. Set IMAGE_OWNER env var:  export IMAGE_OWNER=<github-username>
+#    3. docker compose -f docker-compose.prod.yml up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-backend-env: &backend-env
+  env_file: .env.prod
+  environment:
+    DJANGO_SETTINGS_MODULE: config.settings.prod
+
+services:
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: always
+    env_file: .env.prod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Django API (gunicorn) ───────────────────────────────────────────────────
+  api:
+    image: ghcr.io/${IMAGE_OWNER}/shivlal-backend:latest
+    restart: always
+    volumes:
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+    ports:
+      - "8000:8000"
+    <<: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Worker ──────────────────────────────────────────────────────────
+  celery:
+    image: ghcr.io/${IMAGE_OWNER}/shivlal-backend:latest
+    command: celery -A config worker -l info -Q celery --concurrency=4
+    restart: always
+    volumes:
+      - media_data:/app/media
+    <<: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Beat (scheduled tasks) ──────────────────────────────────────────
+  celery-beat:
+    image: ghcr.io/${IMAGE_OWNER}/shivlal-backend:latest
+    command: celery -A config beat -l info
+    restart: always
+    <<: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── React Web (Nginx) ───────────────────────────────────────────────────────
+  web:
+    image: ghcr.io/${IMAGE_OWNER}/shivlal-web:latest
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:
+  static_data:

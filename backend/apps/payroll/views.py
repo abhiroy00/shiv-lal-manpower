@@ -193,7 +193,11 @@ class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
         emp_code = slip.employee.emp_code
         fname    = f"payslip_{emp_code}_{slip.payroll_run.year}_{slip.payroll_run.month:02d}.pdf"
         resp = HttpResponse(pdf_buf.read(), content_type="application/pdf")
-        resp["Content-Disposition"] = f'inline; filename="{fname}"'
+        resp["Content-Disposition"] = f'attachment; filename="{fname}"'
+        # Never allow browser/proxy to cache payslip PDFs — data changes after re-runs
+        resp["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp["Pragma"]        = "no-cache"
+        resp["Expires"]       = "0"
         return resp
 
 
@@ -232,4 +236,6 @@ class MyPayslipsView(APIView):
                 "net_pay":       str(s.net_pay),
                 "pdf_url":       request.build_absolute_uri(f"/api/payslips/{s.id}/pdf/"),
             })
-        return Response(data)
+        response = Response(data)
+        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response

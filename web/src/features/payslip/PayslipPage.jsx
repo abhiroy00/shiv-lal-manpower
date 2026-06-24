@@ -11,21 +11,24 @@ const SC = {
   paid:     { bg: "#E1F4EC", color: "#15966A" },
 };
 
-function PayslipDetail({ slip, runLabel, onClose }) {
+function PayslipDetail({ slip, onClose }) {
   const accessToken = useSelector((s) => s.auth.accessToken);
   const gross = Number(slip.basic) + Number(slip.hra) + Number(slip.da) + Number(slip.other_allowances);
   const totalDed = Number(slip.pf_employee) + Number(slip.esi_employee) + Number(slip.other_deductions);
+  // Use month_label from serializer (e.g. "June 2026") — avoids stale runLabel
+  const label = slip.month_label || `${MONTHS[slip.run_month] || ""} ${slip.run_year || ""}`;
 
   const handlePdf = async () => {
     const res = await fetch(`/api/payslips/${slip.id}/pdf/`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",  // Force fresh fetch — bypass browser cache
     });
     if (!res.ok) return alert("PDF generation failed");
     const blob = await res.blob();
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `payslip_${slip.emp_code}_${runLabel.replace(" ", "_")}.pdf`;
+    a.download = `payslip_${slip.emp_code}_${label.replace(" ", "_")}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -36,7 +39,7 @@ function PayslipDetail({ slip, runLabel, onClose }) {
       <div style={D.head}>
         <div>
           <div style={D.company}>Shiv Lal Manpower Services</div>
-          <div style={D.title}>PAY SLIP – {runLabel.toUpperCase()}</div>
+          <div style={D.title}>PAY SLIP – {label.toUpperCase()}</div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button style={D.pdfBtn} onClick={handlePdf}>📄 Download PDF</button>
@@ -159,7 +162,6 @@ export default function PayslipPage() {
     return (
       <PayslipDetail
         slip={selected}
-        runLabel={runLabel}
         onClose={() => setSelected(null)}
       />
     );
@@ -228,19 +230,21 @@ export default function PayslipPage() {
           <table style={S.table}>
             <thead>
               <tr>
-                {["Code", "Name", "Designation", "Site", "Days", "Gross", "PF", "ESI", "Net Pay", "Status", ""].map((h) => (
+                {["Code", "Name", "Month", "Designation", "Site", "Days", "Gross", "PF", "ESI", "Net Pay", "Status", ""].map((h) => (
                   <th key={h} style={S.th}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {slips.map((slip, i) => {
-                const sc = SC[slip.run_status] || SC.draft;
+                const sc    = SC[slip.run_status] || SC.draft;
                 const gross = Number(slip.gross_pay || 0);
+                const label = slip.month_label || `${MONTHS[slip.run_month] || "?"} ${slip.run_year || ""}`;
                 return (
                   <tr key={slip.id} style={{ ...S.tr, background: i % 2 === 0 ? "#fff" : "#FAFBFD" }}>
                     <td style={S.td}><span style={S.code}>{slip.emp_code}</span></td>
                     <td style={S.td}><b style={{ color: "#0F1E3D" }}>{slip.employee_name}</b></td>
+                    <td style={S.td}>{label}</td>
                     <td style={S.td}>{slip.designation}</td>
                     <td style={S.td}>{slip.site_name || "—"}</td>
                     <td style={{ ...S.td, textAlign: "center" }}>{slip.present_days}/{slip.working_days}</td>
@@ -250,7 +254,7 @@ export default function PayslipPage() {
                     <td style={{ ...S.td, fontWeight: 700, color: "#0F1E3D" }}>{inr(slip.net_pay)}</td>
                     <td style={S.td}>
                       <span style={{ ...S.pill, background: sc.bg, color: sc.color }}>
-                        {slip.run_status}
+                        {slip.run_status || "draft"}
                       </span>
                     </td>
                     <td style={S.td}>

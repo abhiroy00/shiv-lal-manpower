@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Linking,
+  ActivityIndicator, Alert,
 } from "react-native";
+import { useSelector } from "react-redux";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { useMyPayslipsQuery } from "./payslipApi";
 import { colors } from "../../theme/colors";
 
@@ -13,8 +16,42 @@ function fmt(val) {
 }
 
 function SlipDetail({ slip, onClose }) {
+  const accessToken = useSelector((s) => s.auth.accessToken);
+  const [downloading, setDownloading] = useState(false);
   const gross = Number(slip.basic) + Number(slip.hra) + Number(slip.da) + Number(slip.other_allowances);
   const totalDed = Number(slip.pf_employee) + Number(slip.esi_employee) + Number(slip.other_deductions);
+
+  const handleDownloadPDF = async () => {
+    setDownloading(true);
+    try {
+      const filename = `payslip_${slip.month}_${slip.year}.pdf`;
+      const fileUri  = FileSystem.documentDirectory + filename;
+
+      const result = await FileSystem.downloadAsync(slip.pdf_url, fileUri, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (result.status !== 200) {
+        Alert.alert("Error", "Could not download payslip. Please try again.");
+        return;
+      }
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(result.uri, {
+          mimeType: "application/pdf",
+          dialogTitle: "Open Payslip PDF",
+          UTI: "com.adobe.pdf",
+        });
+      } else {
+        Alert.alert("Saved", `Payslip saved to:\n${result.uri}`);
+      }
+    } catch (e) {
+      Alert.alert("Error", "Failed to download payslip PDF.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <View style={D.wrap}>
@@ -83,10 +120,11 @@ function SlipDetail({ slip, onClose }) {
         </View>
 
         {/* Download PDF */}
-        <TouchableOpacity style={D.pdfBtn}
-          onPress={() => Linking.openURL(slip.pdf_url).catch(() =>
-            Alert.alert("Error", "Could not open PDF"))}>
-          <Text style={D.pdfTxt}>📄  Download Payslip PDF</Text>
+        <TouchableOpacity style={[D.pdfBtn, downloading && { opacity: 0.6 }]}
+          onPress={handleDownloadPDF} disabled={downloading}>
+          <Text style={D.pdfTxt}>
+            {downloading ? "Downloading…" : "📄  Download Payslip PDF"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

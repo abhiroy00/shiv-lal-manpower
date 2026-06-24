@@ -1,13 +1,21 @@
 import { useState, useEffect } from "react";
-import { useCreateEmployeeMutation, useUpdateEmployeeMutation } from "./employeesApi";
+import {
+  useCreateEmployeeMutation,
+  useUpdateEmployeeMutation,
+  useResetEmployeePasswordMutation,
+} from "./employeesApi";
 import { useGetSitesQuery } from "../deployment/deploymentApi";
+import {
+  useGetSalaryStructureQuery,
+  useUpsertSalaryStructureMutation,
+} from "../payroll/payrollApi";
 
 const DESIGNATIONS = [
   "Security Guard", "Housekeeping", "Driver",
   "Data Entry Operator", "Site Supervisor", "Other",
 ];
 
-const TABS = ["Basic Info", "Deployment", "Compliance & ID", "Banking"];
+const TABS = ["Basic Info", "Deployment", "Compliance & ID", "Banking", "Salary"];
 
 const EMPTY = {
   emp_code: "", full_name: "", phone: "", designation: "",
@@ -21,54 +29,78 @@ export default function EmployeeForm({ employee, onClose }) {
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState(EMPTY);
   const [errors, setErrors] = useState({});
+  const [credentials, setCredentials] = useState(null); // shown after creation
+
+  const [salary, setSalary] = useState({ basic: "", hra: "", da: "", other_allowances: "" });
 
   const { data: sitesData } = useGetSitesQuery({});
   const sites = sitesData?.results || [];
 
+  const { data: salaryData } = useGetSalaryStructureQuery(employee?.id, { skip: !isEdit || !employee?.id });
+
   const [createEmployee, { isLoading: creating }] = useCreateEmployeeMutation();
   const [updateEmployee, { isLoading: updating }] = useUpdateEmployeeMutation();
+  const [resetPassword, { isLoading: resetting }] = useResetEmployeePasswordMutation();
+  const [upsertSalary] = useUpsertSalaryStructureMutation();
   const saving = creating || updating;
 
-  // Pre-fill when editing
   useEffect(() => {
     if (isEdit) {
       setForm({
-        emp_code:     employee.emp_code     || "",
-        full_name:    employee.full_name    || "",
-        phone:        employee.phone        || "",
-        designation:  employee.designation  || "",
-        status:       employee.status       || "active",
-        date_joined:  employee.date_joined  || "",
+        emp_code:      employee.emp_code      || "",
+        full_name:     employee.full_name     || "",
+        phone:         employee.phone         || "",
+        designation:   employee.designation   || "",
+        status:        employee.status        || "active",
+        date_joined:   employee.date_joined   || "",
         date_of_birth: employee.date_of_birth || "",
-        address:      employee.address      || "",
-        site:         employee.site         || "",
-        uan:          employee.uan          || "",
-        esic_no:      employee.esic_no      || "",
-        aadhar:       employee.aadhar       || "",
-        pan:          employee.pan          || "",
-        bank_account: employee.bank_account || "",
-        ifsc:         employee.ifsc         || "",
+        address:       employee.address       || "",
+        site:          employee.site          || "",
+        uan:           employee.uan           || "",
+        esic_no:       employee.esic_no       || "",
+        aadhar:        employee.aadhar        || "",
+        pan:           employee.pan           || "",
+        bank_account:  employee.bank_account  || "",
+        ifsc:          employee.ifsc          || "",
       });
     } else {
       setForm(EMPTY);
     }
     setErrors({});
+    setCredentials(null);
+    setSalary({ basic: "", hra: "", da: "", other_allowances: "" });
     setTab(0);
   }, [employee]);
 
-  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  // Pre-fill salary when existing structure loads
+  useEffect(() => {
+    if (salaryData) {
+      const s = salaryData?.results?.[0] ?? salaryData?.[0];
+      if (s) {
+        setSalary({
+          basic:            String(s.basic),
+          hra:              String(s.hra),
+          da:               String(s.da),
+          other_allowances: String(s.other_allowances),
+        });
+      }
+    }
+  }, [salaryData]);
+
+  const set    = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  const setSal = (field) => (e) => setSalary((s) => ({ ...s, [field]: e.target.value }));
 
   const validate = () => {
     const e = {};
-    if (!form.emp_code.trim())   e.emp_code   = "Required";
-    if (!form.full_name.trim())  e.full_name  = "Required";
-    if (!form.phone.trim())      e.phone      = "Required";
-    if (!form.designation)       e.designation = "Required";
-    if (!form.date_joined)       e.date_joined = "Required";
-    if (form.phone && !/^\d{10}$/.test(form.phone)) e.phone = "Enter valid 10-digit mobile";
-    if (form.aadhar && !/^\d{12}$/.test(form.aadhar)) e.aadhar = "Aadhar must be 12 digits";
-    if (form.pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(form.pan)) e.pan = "Invalid PAN format";
-    if (form.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc)) e.ifsc = "Invalid IFSC format";
+    if (!form.emp_code.trim())  e.emp_code   = "Required";
+    if (!form.full_name.trim()) e.full_name  = "Required";
+    if (!form.phone.trim())     e.phone      = "Required";
+    if (!form.designation)      e.designation = "Required";
+    if (!form.date_joined)      e.date_joined = "Required";
+    if (form.phone && !/^\d{10}$/.test(form.phone))                    e.phone  = "Enter valid 10-digit mobile";
+    if (form.aadhar && !/^\d{12}$/.test(form.aadhar))                  e.aadhar = "Aadhar must be 12 digits";
+    if (form.pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(form.pan))           e.pan    = "Invalid PAN format";
+    if (form.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc))       e.ifsc   = "Invalid IFSC format";
     return e;
   };
 
@@ -76,26 +108,44 @@ export default function EmployeeForm({ employee, onClose }) {
     const e = validate();
     if (Object.keys(e).length) {
       setErrors(e);
-      // jump to first tab with error
       const basicFields = ["emp_code", "full_name", "phone", "designation", "date_joined"];
       const compFields  = ["aadhar", "pan"];
       const bankFields  = ["ifsc"];
-      if (basicFields.some((f) => e[f]))      setTab(0);
-      else if (compFields.some((f) => e[f]))  setTab(2);
-      else if (bankFields.some((f) => e[f]))  setTab(3);
+      if (basicFields.some((f) => e[f]))     setTab(0);
+      else if (compFields.some((f) => e[f])) setTab(2);
+      else if (bankFields.some((f) => e[f])) setTab(3);
       return;
     }
 
     const payload = { ...form, site: form.site || null };
     try {
+      let empId;
+      let newCredentials = null;
       if (isEdit) {
         await updateEmployee({ id: employee.id, ...payload }).unwrap();
+        empId = employee.id;
       } else {
-        await createEmployee(payload).unwrap();
+        const result = await createEmployee(payload).unwrap();
+        empId = result.id;
+        if (result.credentials) {
+          newCredentials = result.credentials;
+          setCredentials(result.credentials);
+        }
       }
-      onClose();
+
+      // Save salary structure if basic is filled
+      if (salary.basic && Number(salary.basic) > 0) {
+        await upsertSalary({
+          employee:         empId,
+          basic:            Number(salary.basic),
+          hra:              Number(salary.hra)              || 0,
+          da:               Number(salary.da)               || 0,
+          other_allowances: Number(salary.other_allowances) || 0,
+        });
+      }
+
+      if (!newCredentials) onClose();
     } catch (err) {
-      // Map backend field errors
       if (err?.data) {
         const mapped = {};
         Object.entries(err.data).forEach(([k, v]) => {
@@ -103,6 +153,15 @@ export default function EmployeeForm({ employee, onClose }) {
         });
         setErrors(mapped);
       }
+    }
+  };
+
+  const handleResetPassword = async () => {
+    try {
+      const result = await resetPassword(employee.id).unwrap();
+      setCredentials({ phone: result.phone, default_password: result.default_password });
+    } catch {
+      // ignore – button just stays enabled
     }
   };
 
@@ -114,7 +173,26 @@ export default function EmployeeForm({ employee, onClose }) {
   return (
     <>
       {/* Backdrop */}
-      <div style={S.backdrop} onClick={onClose} />
+      <div style={S.backdrop} onClick={credentials ? undefined : onClose} />
+
+      {/* Credentials modal — shown over the drawer after adding employee */}
+      {credentials && (
+        <div style={S.modalWrap}>
+          <div style={S.modal}>
+            <div style={S.modalIcon}>🔐</div>
+            <div style={S.modalTitle}>Login Credentials Created</div>
+            <div style={S.modalSub}>Share these with the employee for mobile app access.</div>
+            <div style={S.credBox}>
+              <CredRow label="Phone (Login ID)" value={credentials.phone} />
+              <CredRow label="Default Password" value={credentials.default_password} />
+            </div>
+            <div style={S.modalNote}>
+              The employee should change their password after first login.
+            </div>
+            <button style={S.modalBtn} onClick={onClose}>Done</button>
+          </div>
+        </div>
+      )}
 
       {/* Drawer */}
       <div style={S.drawer}>
@@ -266,11 +344,64 @@ export default function EmployeeForm({ employee, onClose }) {
               </div>
             </div>
           )}
+
+          {/* ── Tab 4: Salary ── */}
+          {tab === 4 && (
+            <div style={S.section}>
+              <div style={S.salaryNote}>
+                Set the employee's monthly salary components. These are used to calculate payslips.
+                Leave blank if salary is not applicable.
+              </div>
+              <Field label="Basic Salary (₹) *">
+                <input style={S.input} type="number" min="0" value={salary.basic}
+                  onChange={setSal("basic")} placeholder="e.g. 15000" />
+              </Field>
+              <div style={S.row2}>
+                <Field label="HRA (₹)">
+                  <input style={S.input} type="number" min="0" value={salary.hra}
+                    onChange={setSal("hra")} placeholder="0" />
+                </Field>
+                <Field label="DA (₹)">
+                  <input style={S.input} type="number" min="0" value={salary.da}
+                    onChange={setSal("da")} placeholder="0" />
+                </Field>
+              </div>
+              <Field label="Other Allowances (₹)">
+                <input style={S.input} type="number" min="0" value={salary.other_allowances}
+                  onChange={setSal("other_allowances")} placeholder="0" />
+              </Field>
+              {/* Gross preview */}
+              {salary.basic && (
+                <div style={S.grossPreview}>
+                  <span style={S.grossLabel}>Monthly Gross</span>
+                  <span style={S.grossVal}>
+                    ₹{(
+                      (Number(salary.basic) || 0) +
+                      (Number(salary.hra) || 0) +
+                      (Number(salary.da) || 0) +
+                      (Number(salary.other_allowances) || 0)
+                    ).toLocaleString("en-IN")}
+                  </span>
+                </div>
+              )}
+              <div style={S.infoBox} >
+                <b>PF:</b> 12% of gross · <b>ESI:</b> 0.75% of gross (if gross ≤ ₹21,000).
+                Payslips are generated proportionally based on attendance.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div style={S.footer}>
-          <button style={S.cancelBtn} onClick={onClose} disabled={saving}>Cancel</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button style={S.cancelBtn} onClick={onClose} disabled={saving}>Cancel</button>
+            {isEdit && employee?.has_login && (
+              <button style={S.resetBtn} onClick={handleResetPassword} disabled={resetting}>
+                {resetting ? "Resetting…" : "Reset Password"}
+              </button>
+            )}
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
             {tab > 0 && (
               <button style={S.prevBtn} onClick={() => setTab(tab - 1)} disabled={saving}>← Previous</button>
@@ -295,6 +426,15 @@ function Field({ label, error, children }) {
       <label style={S.label}>{label}</label>
       {children}
       {error && <div style={S.errMsg}>{error}</div>}
+    </div>
+  );
+}
+
+function CredRow({ label, value }) {
+  return (
+    <div style={S.credRow}>
+      <span style={S.credLabel}>{label}</span>
+      <span style={S.credValue}>{value}</span>
     </div>
   );
 }
@@ -355,6 +495,10 @@ const S = {
     padding: "9px 16px", borderRadius: 9, border: "1px solid #E2E7F0",
     background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#6B7793",
   },
+  resetBtn: {
+    padding: "9px 14px", borderRadius: 9, border: "1px solid #1E3563",
+    background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#1E3563",
+  },
   prevBtn: {
     padding: "9px 16px", borderRadius: 9, border: "1px solid #E2E7F0",
     background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
@@ -366,5 +510,44 @@ const S = {
   saveBtn: {
     padding: "9px 20px", borderRadius: 9, border: 0,
     background: "#E8821E", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+  },
+  // Salary tab
+  salaryNote: {
+    fontSize: 13, color: "#6B7793", background: "#F4F6FA",
+    borderRadius: 10, padding: "10px 14px", marginBottom: 16,
+  },
+  grossPreview: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    background: "#1E3563", borderRadius: 10, padding: "12px 16px", marginBottom: 12,
+  },
+  grossLabel: { fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.7)" },
+  grossVal:   { fontSize: 18, fontWeight: 800, color: "#fff", fontFamily: "Archivo" },
+  // Credentials modal
+  modalWrap: {
+    position: "fixed", inset: 0, zIndex: 200,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: "rgba(15,30,61,.55)",
+  },
+  modal: {
+    background: "#fff", borderRadius: 16, padding: "32px 28px", width: 360,
+    boxShadow: "0 20px 60px rgba(15,30,61,.25)", textAlign: "center",
+  },
+  modalIcon:  { fontSize: 40, marginBottom: 12 },
+  modalTitle: { fontFamily: "Archivo", fontSize: 18, fontWeight: 700, color: "#0F1E3D", marginBottom: 6 },
+  modalSub:   { fontSize: 13, color: "#6B7793", marginBottom: 20 },
+  credBox: {
+    background: "#F4F6FA", borderRadius: 10, padding: "14px 16px",
+    marginBottom: 16, textAlign: "left",
+  },
+  credRow:   { display: "flex", justifyContent: "space-between", padding: "6px 0" },
+  credLabel: { fontSize: 12, fontWeight: 600, color: "#6B7793" },
+  credValue: { fontSize: 14, fontWeight: 700, color: "#0F1E3D", fontFamily: "monospace" },
+  modalNote: {
+    fontSize: 12, color: "#8a5310", background: "#FCEFDD",
+    borderRadius: 8, padding: "8px 12px", marginBottom: 20,
+  },
+  modalBtn: {
+    padding: "10px 32px", borderRadius: 9, border: 0,
+    background: "#E8821E", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
   },
 };

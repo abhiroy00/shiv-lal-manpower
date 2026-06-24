@@ -27,6 +27,48 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             return EmployeeListSerializer
         return EmployeeSerializer
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        employee = serializer.save()
+
+        from apps.accounts.models import User
+        credentials = None
+        if not User.objects.filter(phone=employee.phone).exists():
+            User.objects.create_user(
+                phone=employee.phone,
+                password=employee.phone,
+                full_name=employee.full_name,
+                role="employee",
+                employee=employee,
+            )
+            credentials = {
+                "phone": employee.phone,
+                "default_password": employee.phone,
+            }
+
+        data = EmployeeSerializer(employee, context={"request": request}).data
+        if credentials:
+            data["credentials"] = credentials
+        return Response(data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="reset-password",
+            permission_classes=[IsAdminHR])
+    def reset_password(self, request, pk=None):
+        employee = self.get_object()
+        from apps.accounts.models import User
+        try:
+            user = employee.user_account
+        except Exception:
+            return Response({"detail": "No login account found for this employee."}, status=400)
+        user.set_password(employee.phone)
+        user.save()
+        return Response({
+            "detail": "Password reset successfully.",
+            "phone": employee.phone,
+            "default_password": employee.phone,
+        })
+
     @action(detail=True, methods=["post"], url_path="transfer")
     def transfer(self, request, pk=None):
         """Move employee to a different site. Body: { site_id }"""
