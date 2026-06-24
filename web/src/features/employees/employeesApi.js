@@ -22,6 +22,9 @@ export const employeesApi = baseApi.injectEndpoints({
       query: (id) => ({ url: `/employees/${id}/`, method: "DELETE" }),
       invalidatesTags: ["Employee"],
     }),
+    resetEmployeePassword: build.mutation({
+      query: (id) => ({ url: `/employees/${id}/reset-password/`, method: "POST" }),
+    }),
   }),
 });
 
@@ -31,4 +34,5 @@ export const {
   useCreateEmployeeMutation,
   useUpdateEmployeeMutation,
   useDeleteEmployeeMutation,
+  useResetEmployeePasswordMutation,
 } = employeesApi;

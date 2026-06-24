@@ -94,6 +94,44 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["employee", "date", "status", "site"]
 
+    @action(detail=False, methods=["post"], url_path="mark",
+            permission_classes=[IsAuthenticated])
+    def mark(self, request):
+        """HR: set or clear attendance for a single employee+date.
+        Body: { employee_id, date, status: "present"|"late"|"absent" }
+        """
+        from apps.common.permissions import IsAdminHR
+        # Only admin/hr can mark attendance manually
+        if request.user.role not in ("admin", "hr"):
+            return Response({"detail": "Permission denied."}, status=403)
+
+        emp_id   = request.data.get("employee_id")
+        date_str = request.data.get("date")
+        new_status = request.data.get("status")
+
+        if not emp_id or not date_str or new_status not in ("present", "late", "absent"):
+            return Response({"detail": "employee_id, date and status (present/late/absent) are required."}, status=400)
+
+        if new_status == "absent":
+            Attendance.objects.filter(employee_id=emp_id, date=date_str).delete()
+            return Response({"detail": "Attendance cleared.", "status": "absent"})
+
+        try:
+            emp = Employee.objects.get(pk=emp_id)
+        except Employee.DoesNotExist:
+            return Response({"detail": "Employee not found."}, status=404)
+
+        att, _ = Attendance.objects.update_or_create(
+            employee_id=emp_id,
+            date=date_str,
+            defaults={
+                "status": new_status,
+                "site":   emp.site,
+                "geofence_ok": True,
+            },
+        )
+        return Response({"detail": "Attendance saved.", "status": att.status})
+
     @action(detail=False, methods=["get"], url_path="register")
     def register(self, request):
         today = date.today()

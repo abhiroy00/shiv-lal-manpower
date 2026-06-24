@@ -48,7 +48,7 @@ export const baseApi = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth,
   tagTypes: [
-    "Employee", "Attendance", "Payroll", "Payslip",
+    "Employee", "Attendance", "Payroll", "Payslip", "SalaryStructure",
     "Compliance", "Recruitment", "Deployment", "Dashboard", "User", "Leave",
   ],
   endpoints: () => ({}),

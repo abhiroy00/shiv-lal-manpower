@@ -3,7 +3,7 @@ import { getTokens, saveTokens, clearTokens } from "../services/storage";
 import { logout, setCredentials } from "../features/auth/authSlice";
 
 // apna PC ka IP yahan dalo (ipconfig se dekho)
-const API_URL = "http://192.168.1.11:8000/api";
+const API_URL = "http://192.168.1.25:8000/api";
 
 // Simple mutex — async-mutex ki jagah (private fields problem avoid karta hai)
 let isRefreshing = false;

@@ -14,6 +14,10 @@ export const attendanceApi = baseApi.injectEndpoints({
       query: (params) => ({ url: "/attendance/register/", params }),
       providesTags: ["Attendance"],
     }),
+    markAttendance: build.mutation({
+      query: (body) => ({ url: "/attendance/mark/", method: "POST", body }),
+      // Don't auto-invalidate — we use optimistic local state in the page
+    }),
   }),
 });
 
@@ -21,4 +25,5 @@ export const {
   useGetAttendanceQuery,
   useGetTodaySummaryQuery,
   useGetAttendanceRegisterQuery,
+  useMarkAttendanceMutation,
 } = attendanceApi;

@@ -221,17 +221,8 @@ function ApplyForm({ balance, onSuccess }) {
       </View>
 
       {/* Dates */}
-      <View style={F.dateRow}>
-        <View style={{ flex: 1 }}>
-          <DateInput label="From Date" value={fromDate} onChange={setFromDate} />
-        </View>
-        <View style={F.dateSepWrap}>
-          <Ionicons name="arrow-forward" size={16} color={colors.muted} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <DateInput label="To Date" value={toDate} onChange={setToDate} />
-        </View>
-      </View>
+      <DateInput label="From Date" value={fromDate} onChange={setFromDate} />
+      <DateInput label="To Date"   value={toDate}   onChange={setToDate} />
 
       {/* Days badge */}
       {days > 0 && (
@@ -468,8 +459,6 @@ const F = StyleSheet.create({
   typeBtn:      { borderWidth: 1.5, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, alignItems: "center" },
   typeTxt:      { fontSize: 13, color: colors.ink, fontWeight: "700" },
   typeBalance:  { fontSize: 10, color: colors.muted, marginTop: 2 },
-  dateRow:      { flexDirection: "row", alignItems: "flex-end", gap: 4, marginBottom: 12 },
-  dateSepWrap:  { paddingBottom: 12 },
   daysBadge:    { flexDirection: "row", alignItems: "center", borderRadius: 10, padding: 10, marginBottom: 16 },
   daysTxt:      { fontSize: 13, fontWeight: "700" },
   reason:       { borderWidth: 1.5, borderColor: colors.line, borderRadius: 12, padding: 14, fontSize: 14, color: colors.ink, minHeight: 90, marginBottom: 16, backgroundColor: "#FAFBFF" },
@@ -479,12 +468,12 @@ const F = StyleSheet.create({
 });
 
 const DI = StyleSheet.create({
-  wrap:    { marginBottom: 4 },
-  label:   { fontSize: 11, fontWeight: "700", color: colors.muted, marginBottom: 6 },
-  row:     { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: colors.line, borderRadius: 12, backgroundColor: "#FAFBFF", paddingHorizontal: 10 },
-  seg:     { flex: 1, padding: 12, fontSize: 15, color: colors.ink, textAlign: "center" },
-  segYear: { flex: 1.5 },
-  sep:     { color: colors.muted, fontSize: 16, fontWeight: "600" },
+  wrap:    { marginBottom: 12 },
+  label:   { fontSize: 12, fontWeight: "700", color: colors.muted, marginBottom: 6, letterSpacing: 0.4 },
+  row:     { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: colors.line, borderRadius: 12, backgroundColor: "#FAFBFF", paddingHorizontal: 8 },
+  seg:     { flex: 2, paddingVertical: 14, paddingHorizontal: 2, fontSize: 17, color: colors.ink, textAlign: "center", fontWeight: "600" },
+  segYear: { flex: 3 },
+  sep:     { color: colors.muted, fontSize: 20, fontWeight: "300", paddingHorizontal: 2 },
 });
 
 const LC = StyleSheet.create({
