@@ -18,4 +18,5 @@ urlpatterns = [
     path("api/", include("apps.reports.urls")),
     path("api/", include("apps.dashboard.urls")),
     path("api/", include("apps.notifications.urls")),
+    path("api/", include("apps.leaves.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

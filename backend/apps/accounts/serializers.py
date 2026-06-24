@@ -53,6 +53,8 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created_at")
 
     def get_employee_detail(self, obj):
+        if not obj.employee_id:
+            return None
         try:
             return EmployeeDetailSerializer(obj.employee, context=self.context).data
         except Exception:

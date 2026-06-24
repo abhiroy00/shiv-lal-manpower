@@ -25,11 +25,11 @@ const Tab   = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 const TABS = [
-  { name: "Home",       label: "Home",     icon: "home",         iconOut: "home-outline"         },
-  { name: "Attendance", label: "Check In", icon: "camera",       iconOut: "camera-outline"       },
-  { name: "History",    label: "History",  icon: "calendar",     iconOut: "calendar-outline"     },
-  { name: "Leave",      label: "Leave",    icon: "umbrella",     iconOut: "umbrella-outline"     },
-  { name: "Profile",    label: "Profile",  icon: "person-circle",iconOut: "person-circle-outline"},
+  { name: "Home",       label: "Home",     icon: "home",          iconOut: "home-outline"          },
+  { name: "Attendance", label: "Check In", icon: "camera",        iconOut: "camera-outline"        },
+  { name: "History",    label: "History",  icon: "calendar",      iconOut: "calendar-outline"      },
+  { name: "Leave",      label: "Leave",    icon: "briefcase",     iconOut: "briefcase-outline"     },
+  { name: "Profile",    label: "Profile",  icon: "person-circle", iconOut: "person-circle-outline" },
 ];
 
 function MainTabs() {

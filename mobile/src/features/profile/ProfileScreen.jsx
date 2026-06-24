@@ -240,10 +240,10 @@ export default function ProfileScreen() {
       {
         text: "Logout",
         style: "destructive",
-        onPress: async () => {
-          await clearTokens();
-          dispatch(baseApi.util.resetApiState());
+        onPress: () => {
           dispatch(logout());
+          dispatch(baseApi.util.resetApiState());
+          clearTokens();
         },
       },
     ]);
@@ -313,30 +313,47 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* ── Work Details ── */}
-        <SectionCard icon="briefcase-outline" title="WORK DETAILS">
-          <InfoRow label="Designation" value={emp?.designation} />
-          <InfoRow label="Site"        value={emp?.site_name} />
-          <InfoRow label="District"    value={emp?.district_name} />
-          <InfoRow label="State"       value={emp?.state_name} />
-          <InfoRow label="Date Joined" value={formatDate(emp?.date_joined)} />
-          <InfoRow label="Date of Birth" value={formatDate(emp?.date_of_birth)} />
-          <InfoRow label="Status"      value={emp?.status ? emp.status.charAt(0).toUpperCase() + emp.status.slice(1) : null} last />
-        </SectionCard>
+        {/* ── Admin notice if no employee linked ── */}
+        {!emp && (
+          <View style={S.noEmpCard}>
+            <Ionicons name="information-circle-outline" size={22} color={colors.saffron} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={S.noEmpTitle}>Admin / HR Account</Text>
+              <Text style={S.noEmpSub}>Employee profile details are not linked to this account.</Text>
+            </View>
+          </View>
+        )}
 
-        {/* ── Statutory ── */}
-        <SectionCard icon="shield-checkmark-outline" title="STATUTORY DETAILS">
-          <MaskedRow label="UAN"     value={emp?.uan}     revealed={revealed.uan}    onToggle={() => toggle("uan")} />
-          <MaskedRow label="ESIC"    value={emp?.esic_no} revealed={revealed.esic}   onToggle={() => toggle("esic")} />
-          <MaskedRow label="PAN"     value={emp?.pan}     revealed={revealed.pan}    onToggle={() => toggle("pan")} />
-          <MaskedRow label="Aadhar"  value={emp?.aadhar}  revealed={revealed.aadhar} onToggle={() => toggle("aadhar")} last />
-        </SectionCard>
+        {/* ── Work Details (only for employees) ── */}
+        {emp && (
+          <SectionCard icon="briefcase-outline" title="WORK DETAILS">
+            <InfoRow label="Designation"   value={emp.designation} />
+            <InfoRow label="Site"          value={emp.site_name} />
+            <InfoRow label="District"      value={emp.district_name} />
+            <InfoRow label="State"         value={emp.state_name} />
+            <InfoRow label="Date Joined"   value={formatDate(emp.date_joined)} />
+            <InfoRow label="Date of Birth" value={formatDate(emp.date_of_birth)} />
+            <InfoRow label="Status"        value={emp.status ? emp.status.charAt(0).toUpperCase() + emp.status.slice(1) : null} last />
+          </SectionCard>
+        )}
 
-        {/* ── Bank ── */}
-        <SectionCard icon="card-outline" title="BANK DETAILS">
-          <MaskedRow label="Account No." value={emp?.bank_account} revealed={revealed.account} onToggle={() => toggle("account")} />
-          <InfoRow   label="IFSC"        value={emp?.ifsc} last />
-        </SectionCard>
+        {/* ── Statutory (only for employees) ── */}
+        {emp && (
+          <SectionCard icon="shield-checkmark-outline" title="STATUTORY DETAILS">
+            <MaskedRow label="UAN"    value={emp.uan}     revealed={revealed.uan}    onToggle={() => toggle("uan")} />
+            <MaskedRow label="ESIC"   value={emp.esic_no} revealed={revealed.esic}   onToggle={() => toggle("esic")} />
+            <MaskedRow label="PAN"    value={emp.pan}     revealed={revealed.pan}    onToggle={() => toggle("pan")} />
+            <MaskedRow label="Aadhar" value={emp.aadhar}  revealed={revealed.aadhar} onToggle={() => toggle("aadhar")} last />
+          </SectionCard>
+        )}
+
+        {/* ── Bank (only for employees) ── */}
+        {emp && (
+          <SectionCard icon="card-outline" title="BANK DETAILS">
+            <MaskedRow label="Account No." value={emp.bank_account} revealed={revealed.account} onToggle={() => toggle("account")} />
+            <InfoRow   label="IFSC"        value={emp.ifsc} last />
+          </SectionCard>
+        )}
 
         {/* ── Contact ── */}
         <SectionCard icon="call-outline" title="CONTACT">
@@ -429,6 +446,10 @@ const S = StyleSheet.create({
 
   logoutBtn:   { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, margin: 16, marginTop: 20, backgroundColor: "#FBE6E5", borderRadius: 14, padding: 16 },
   logoutTxt:   { color: "#C0392B", fontWeight: "700", fontSize: 16 },
+
+  noEmpCard:   { flexDirection: "row", alignItems: "flex-start", backgroundColor: "#FEF3E8", borderRadius: 14, marginHorizontal: 16, marginTop: 14, padding: 16, borderWidth: 1, borderColor: "rgba(232,130,30,.25)" },
+  noEmpTitle:  { fontSize: 14, fontWeight: "700", color: colors.ink, marginBottom: 3 },
+  noEmpSub:    { fontSize: 12, color: colors.muted, lineHeight: 18 },
 });
 
 const M = StyleSheet.create({
