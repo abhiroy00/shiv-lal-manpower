@@ -10,6 +10,7 @@ export const NAV = [
       { label: "Attendance", path: "/attendance", icon: "✅" },
       { label: "Attendance Register", path: "/attendance/register", icon: "📋" },
       { label: "Recruitment", path: "/recruitment", icon: "🔍" },
+      { label: "Leave Management", path: "/leave", icon: "🏖️" },
     ],
   },
   {

@@ -3,7 +3,7 @@ import { getTokens, saveTokens, clearTokens } from "../services/storage";
 import { logout, setCredentials } from "../features/auth/authSlice";
 
 // apna PC ka IP yahan dalo (ipconfig se dekho)
-const API_URL = "http://192.168.101.6:8000/api";
+const API_URL = "http://10.126.247.43:8000/api";
 
 // Simple mutex — async-mutex ki jagah (private fields problem avoid karta hai)
 let isRefreshing = false;
@@ -44,11 +44,13 @@ const baseQueryWithReauth = async (args, api, extra) => {
         } else {
           processQueue(new Error("Refresh failed"));
           await clearTokens();
+          api.dispatch(baseApi.util.resetApiState());
           api.dispatch(logout());
         }
       } catch (err) {
         processQueue(err);
         await clearTokens();
+        api.dispatch(baseApi.util.resetApiState());
         api.dispatch(logout());
       } finally {
         isRefreshing = false;
@@ -67,7 +69,7 @@ const baseQueryWithReauth = async (args, api, extra) => {
 export const baseApi = createApi({
   reducerPath: "api",
   baseQuery:   baseQueryWithReauth,
-  tagTypes:    ["Attendance", "Payslip", "Leave", "User"],
+  tagTypes:    ["Attendance", "Payslip", "Leave", "User", "Profile", "Notification"],
   endpoints:   () => ({}),
 });
 

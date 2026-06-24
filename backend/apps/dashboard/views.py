@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from apps.employees.models import Employee
-from apps.attendance.models import Attendance
+from apps.attendance.models import Attendance, LeaveRequest
 from apps.deployment.models import District, Site, State
 from apps.payroll.models import PayrollRun, Payslip
 from apps.compliance.models import ChallanRun
@@ -86,6 +86,12 @@ class DashboardKPIView(APIView):
                 "total_esi_emp":  float(latest_run.payslips.aggregate(s=Sum("esi_employee"))["s"] or 0),
             }
 
+        # ── Leave summary ─────────────────────────────────────────
+        pending_leaves  = LeaveRequest.objects.filter(status="pending").count()
+        approved_leaves = LeaveRequest.objects.filter(
+            status="approved", from_date__gte=month_start
+        ).count()
+
         # ── Compliance liability (latest challans) ─────────────
         latest_pf = ChallanRun.objects.filter(challan_type="epf").order_by("-id").first()
         latest_esi = ChallanRun.objects.filter(challan_type="esi").order_by("-id").first()
@@ -115,6 +121,9 @@ class DashboardKPIView(APIView):
             # Cards
             "payroll":           payroll_summary,
             "compliance":        compliance,
+            # Leave
+            "pending_leaves":    pending_leaves,
+            "approved_leaves_this_month": approved_leaves,
         })
 
 

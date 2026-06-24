@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "apps.recruitment",
     "apps.reports",
     "apps.dashboard",
+    "apps.notifications",
 ]
 
 MIDDLEWARE = [

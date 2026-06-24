@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMyAttendanceQuery } from "./attendanceApi";
 import { colors } from "../../theme/colors";
 
@@ -20,6 +22,7 @@ const CODE_COLOR = {
 };
 
 export default function HistoryScreen() {
+  const insets = useSafeAreaInsets();
   const today  = new Date();
   const [year,  setYear]  = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -48,13 +51,13 @@ export default function HistoryScreen() {
   return (
     <ScrollView style={S.page} contentContainerStyle={{ paddingBottom: 40 }}>
       {/* Month navigator */}
-      <View style={S.nav}>
-        <TouchableOpacity style={S.navBtn} onPress={prevMonth}>
-          <Text style={S.navArrow}>‹</Text>
+      <View style={[S.nav, { paddingTop: (insets.top || 0) + 10 }]}>
+        <TouchableOpacity style={S.navBtn} onPress={prevMonth} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={S.navTitle}>{MONTHS[month - 1]} {year}</Text>
-        <TouchableOpacity style={S.navBtn} onPress={nextMonth}>
-          <Text style={S.navArrow}>›</Text>
+        <TouchableOpacity style={S.navBtn} onPress={nextMonth} activeOpacity={0.7}>
+          <Ionicons name="chevron-forward" size={22} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -164,8 +167,7 @@ function chunkArray(arr, size) {
 const S = StyleSheet.create({
   page:        { flex: 1, backgroundColor: "#F4F6FA" },
   nav:         { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16, backgroundColor: colors.ink },
-  navBtn:      { padding: 8 },
-  navArrow:    { color: "#fff", fontSize: 28, lineHeight: 32 },
+  navBtn:      { padding: 8, backgroundColor: "rgba(255,255,255,.1)", borderRadius: 10 },
   navTitle:    { color: "#fff", fontSize: 17, fontWeight: "700" },
   strip:       { flexDirection: "row", backgroundColor: "#fff", marginHorizontal: 16, marginTop: 16, borderRadius: 14, overflow: "hidden" },
   stripItem:   { flex: 1, alignItems: "center", paddingVertical: 14 },

@@ -18,6 +18,9 @@ from .services import process_check_in
 from apps.employees.models import Employee
 
 
+LEAVE_LIMITS = {"cl": 12, "sl": 12, "el": 15, "unpaid": None}
+
+
 def _build_register(year, month, site_id=None, district_id=None, search=None):
     """
     Returns (days_in_month, sundays_set, employee_rows_list).
@@ -389,7 +392,6 @@ class MyAttendanceView(APIView):
             elif date(year, month, d) > today:
                 days.append({"day": d, "code": "", "status": "future"})
             else:
-                # check if leave approved
                 on_leave = LeaveRequest.objects.filter(
                     employee=emp, status="approved",
                     from_date__lte=date(year, month, d),
@@ -482,3 +484,47 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         leave.review_note = request.data.get("note", "")
         leave.save()
         return Response(LeaveRequestSerializer(leave).data)
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        leave = self.get_object()
+        try:
+            emp = request.user.employee
+        except Exception:
+            return Response({"detail": "No employee linked."}, status=400)
+        if leave.employee != emp:
+            return Response({"detail": "You can only cancel your own leave requests."}, status=403)
+        if leave.status != "pending":
+            return Response({"detail": "Only pending leave requests can be cancelled."}, status=400)
+        leave.delete()
+        return Response({"detail": "Leave request cancelled."}, status=200)
+
+
+class LeaveBalanceView(APIView):
+    """Employee: leave usage summary for the current year."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            emp = request.user.employee
+        except Exception:
+            return Response({"detail": "No employee linked."}, status=400)
+
+        current_year = date.today().year
+        leaves = LeaveRequest.objects.filter(
+            employee=emp,
+            from_date__year=current_year,
+        )
+
+        balance = {}
+        for lt, limit in LEAVE_LIMITS.items():
+            used = sum(l.days for l in leaves if l.leave_type == lt and l.status == "approved")
+            pending = sum(l.days for l in leaves if l.leave_type == lt and l.status == "pending")
+            balance[lt] = {
+                "used":      used,
+                "pending":   pending,
+                "limit":     limit,
+                "remaining": max(limit - used, 0) if limit is not None else None,
+            }
+
+        return Response({"year": current_year, "balance": balance})

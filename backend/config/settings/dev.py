@@ -2,6 +2,8 @@ from .base import *
 
 DEBUG = True
 
+ALLOWED_HOSTS = ["*"]  # dev only — allow all hosts including mobile IP
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",

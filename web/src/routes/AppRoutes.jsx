@@ -12,6 +12,7 @@ import PayslipPage from "../features/payslip/PayslipPage";
 import RecruitmentPage from "../features/recruitment/RecruitmentPage";
 import DeploymentPage from "../features/deployment/DeploymentPage";
 import ReportsPage from "../features/reports/ReportsPage";
+import LeavePage from "../features/leave/LeavePage";
 
 const AppRoutes = [
   { path: "/login", element: <LoginPage /> },
@@ -30,6 +31,7 @@ const AppRoutes = [
       { path: "recruitment", element: <RecruitmentPage /> },
       { path: "deployment", element: <DeploymentPage /> },
       { path: "reports", element: <ReportsPage /> },
+      { path: "leave", element: <LeavePage /> },
     ],
   },
   { path: "*", element: <Navigate to="/login" replace /> },

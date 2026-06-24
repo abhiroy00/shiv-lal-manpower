@@ -12,3 +12,4 @@ Pillow>=10.0
 gunicorn>=21.0
 uvicorn[standard]>=0.27
 python-decouple>=3.8
+django-celery-beat>=2.6

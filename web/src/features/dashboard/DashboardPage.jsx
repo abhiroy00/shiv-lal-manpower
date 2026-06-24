@@ -1,4 +1,5 @@
-﻿import { useGetKPIsQuery } from "./dashboardApi";
+﻿import { useNavigate } from "react-router-dom";
+import { useGetKPIsQuery } from "./dashboardApi";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -24,13 +25,15 @@ function AttTooltip({ active, payload, label }) {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const { data: d, isLoading } = useGetKPIsQuery(undefined, { pollingInterval: 60000 });
 
   const topKPIs = [
-    { label: "Active Employees",   value: d?.total_manpower,   sub: `+${d?.new_this_month ?? 0} this month`, color: "#1E3563", accent: "#E3EEF9", icon: "👥" },
-    { label: "Present Today",      value: d?.present_today,    sub: `${d?.absent_today ?? 0} absent`,        color: "#15966A", accent: "#E1F4EC", icon: "✅" },
-    { label: "Today's Att%",       value: d ? pct(d.attendance_pct)  : "—", sub: `Month avg ${pct(d?.month_att_pct)}`, color: "#E8821E", accent: "#FEF3E8", icon: "📊" },
-    { label: "Active Sites",       value: d?.total_sites,      sub: `${d?.total_states ?? 0} states`,        color: "#6A0DAD", accent: "#F3E5F5", icon: "📍" },
+    { label: "Active Employees",   value: d?.total_manpower,   sub: `+${d?.new_this_month ?? 0} this month`,                       color: "#1E3563", accent: "#E3EEF9", icon: "👥" },
+    { label: "Present Today",      value: d?.present_today,    sub: `${d?.absent_today ?? 0} absent`,                              color: "#15966A", accent: "#E1F4EC", icon: "✅" },
+    { label: "Today's Att%",       value: d ? pct(d.attendance_pct)  : "—", sub: `Month avg ${pct(d?.month_att_pct)}`,             color: "#E8821E", accent: "#FEF3E8", icon: "📊" },
+    { label: "Active Sites",       value: d?.total_sites,      sub: `${d?.total_states ?? 0} states`,                              color: "#6A0DAD", accent: "#F3E5F5", icon: "📍" },
+    { label: "Pending Leaves",     value: d?.pending_leaves,   sub: `${d?.approved_leaves_this_month ?? 0} approved this month`,   color: "#C98A12", accent: "#FBF1DC", icon: "🏖️", link: "/leave" },
   ];
 
   const payroll = d?.payroll;
@@ -54,7 +57,7 @@ export default function DashboardPage() {
       {/* KPI row */}
       <div style={S.kpiGrid}>
         {topKPIs.map((k) => (
-          <div key={k.label} style={S.kpiCard}>
+          <div key={k.label} style={{ ...S.kpiCard, cursor: k.link ? "pointer" : "default" }} onClick={() => k.link && navigate(k.link)}>
             <div style={{ ...S.kpiIcon, background: k.accent, color: k.color }}>{k.icon}</div>
             <div style={S.kpiRight}>
               <div style={S.kpiLabel}>{k.label}</div>
@@ -232,7 +235,7 @@ const S = {
   headerMeta:  { textAlign: "right" },
   today:       { fontSize: 12, color: "#6B7793" },
 
-  kpiGrid:     { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 14 },
+  kpiGrid:     { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 14 },
   kpiCard:     { background: "#fff", border: "1px solid #E2E7F0", borderRadius: 14, padding: "16px 18px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 1px 3px rgba(15,30,61,.05)" },
   kpiIcon:     { width: 48, height: 48, borderRadius: 12, display: "grid", placeItems: "center", fontSize: 22, flexShrink: 0 },
   kpiRight:    { flex: 1, minWidth: 0 },

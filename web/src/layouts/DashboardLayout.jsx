@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../features/auth/authSlice";
+import { baseApi } from "../api/baseApi";
 import { NAV } from "../constants/nav";
 
 export default function DashboardLayout() {
@@ -11,6 +12,7 @@ export default function DashboardLayout() {
   const user = useSelector((s) => s.auth.user);
 
   const handleLogout = () => {
+    dispatch(baseApi.util.resetApiState());
     dispatch(logout());
     navigate("/login");
   };
