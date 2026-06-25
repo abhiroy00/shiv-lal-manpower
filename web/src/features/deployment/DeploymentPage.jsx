@@ -3,8 +3,14 @@ import {
   useGetSitesQuery,
   useGetSiteSummaryQuery,
   useGetSiteEmployeesQuery,
+  useGetStatesQuery,
+  useCreateStateMutation,
+  useGetDistrictsQuery,
+  useCreateDistrictMutation,
   useTransferEmployeeMutation,
   useBulkTransferMutation,
+  useCreateSiteMutation,
+  useUpdateSiteMutation,
 } from "./deploymentApi";
 
 // ── helpers ───────────────────────────────────────────────────
@@ -12,6 +18,225 @@ function fillColor(pct) {
   if (pct >= 90) return { bar: "#15966A", badge: "#E1F4EC", text: "#15966A", label: "Full" };
   if (pct >= 60) return { bar: "#E8821E", badge: "#FBF1DC", text: "#C98A12", label: "Partial" };
   return      { bar: "#D2453F", badge: "#FDECEA", text: "#D2453F", label: "Critical" };
+}
+
+// ── Inline creator (reusable) ─────────────────────────────────
+function InlineCreate({ placeholder, onCreate, busy }) {
+  const [val, setVal] = useState("");
+  return (
+    <div style={F.inlineRow}>
+      <input style={F.inlineInput} placeholder={placeholder}
+        value={val} onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && val.trim() && onCreate(val.trim(), () => setVal(""))} />
+      <button style={{ ...F.inlineBtn, opacity: !val.trim() || busy ? .5 : 1 }}
+        disabled={!val.trim() || busy}
+        onClick={() => onCreate(val.trim(), () => setVal(""))}>
+        {busy ? "..." : "Create"}
+      </button>
+    </div>
+  );
+}
+
+// ── Site form modal (create / edit) ──────────────────────────
+const BLANK_SITE = { name: "", address: "", lat: "", lng: "", geofence_radius: 200, sanctioned_strength: 0, is_active: true };
+
+function SiteFormModal({ site, onClose }) {
+  const isEdit = !!site;
+
+  // Step 1 — State (site serializer now includes district_state_id)
+  const [stateId,      setStateId]      = useState(isEdit ? String(site.district_state_id ?? "") : "");
+  const [showNewState, setShowNewState] = useState(false);
+
+  // Step 2 — District
+  const [districtId,      setDistrictId]      = useState(isEdit ? String(site.district) : "");
+  const [showNewDistrict, setShowNewDistrict] = useState(false);
+
+  // Step 3 — Site fields
+  const [form, setForm] = useState(
+    isEdit
+      ? { name: site.name, address: site.address || "",
+          lat: site.lat ?? "", lng: site.lng ?? "",
+          geofence_radius: site.geofence_radius,
+          sanctioned_strength: site.sanctioned_strength,
+          is_active: site.is_active }
+      : { ...BLANK_SITE }
+  );
+  const [err, setErr] = useState("");
+
+  const { data: statesRaw }    = useGetStatesQuery();
+  const { data: districtsRaw } = useGetDistrictsQuery(stateId || undefined);
+
+  const states    = statesRaw?.results    || statesRaw    || [];
+  const districts = districtsRaw?.results || districtsRaw || [];
+
+  const [createState,    { isLoading: creatingState }]    = useCreateStateMutation();
+  const [createDistrict, { isLoading: creatingDistrict }] = useCreateDistrictMutation();
+  const [createSite,     { isLoading: creatingSite }]     = useCreateSiteMutation();
+  const [updateSite,     { isLoading: updatingSite }]     = useUpdateSiteMutation();
+  const saveBusy = creatingSite || updatingSite;
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleAddState = async (name, reset) => {
+    try {
+      const res = await createState({ name }).unwrap();
+      setStateId(String(res.id));
+      setDistrictId("");
+      setShowNewState(false);
+      reset();
+    } catch (e) {
+      setErr(e?.data?.name?.[0] || "Could not create state.");
+    }
+  };
+
+  const handleAddDistrict = async (name, reset) => {
+    if (!stateId) return setErr("Select a state first.");
+    try {
+      const res = await createDistrict({ name, state: stateId }).unwrap();
+      setDistrictId(String(res.id));
+      setShowNewDistrict(false);
+      reset();
+    } catch (e) {
+      setErr(e?.data?.name?.[0] || "Could not create district.");
+    }
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return setErr("Site name is required.");
+    if (!districtId)       return setErr("District is required.");
+    setErr("");
+    const body = {
+      ...form,
+      district: districtId,
+      lat: form.lat !== "" ? form.lat : null,
+      lng: form.lng !== "" ? form.lng : null,
+    };
+    try {
+      if (isEdit) await updateSite({ id: site.id, ...body }).unwrap();
+      else        await createSite(body).unwrap();
+      onClose();
+    } catch (e) {
+      setErr(JSON.stringify(e?.data || "Save failed"));
+    }
+  };
+
+  const selectedState    = states.find((s) => String(s.id) === String(stateId));
+  const selectedDistrict = districts.find((d) => String(d.id) === String(districtId));
+
+  return (
+    <div style={F.overlay} onClick={onClose}>
+      <div style={F.box} onClick={(e) => e.stopPropagation()}>
+        <div style={F.head}>
+          <span style={F.title}>{isEdit ? "Edit Site" : "Create New Site"}</span>
+          <button style={F.close} onClick={onClose}>✕</button>
+        </div>
+        <div style={F.body}>
+          {err && <div style={F.err}>{err}</div>}
+
+          {/* ── Step 1: State ───────────────────────── */}
+          <div style={F.stepHead}>
+            <span style={F.stepNum}>1</span>
+            <span style={F.stepLabel}>State</span>
+            {selectedState && <span style={F.stepDone}>{selectedState.name} ✓</span>}
+          </div>
+          <div style={F.fieldRow}>
+            <select style={{ ...F.input, flex: 1 }} value={stateId}
+              onChange={(e) => { setStateId(e.target.value); setDistrictId(""); setShowNewDistrict(false); }}>
+              <option value="">Select state...</option>
+              {states.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <button style={F.addBtn} onClick={() => setShowNewState((v) => !v)}>
+              {showNewState ? "Cancel" : "+ New"}
+            </button>
+          </div>
+          {showNewState && (
+            <InlineCreate placeholder="State name (e.g. Uttar Pradesh)"
+              onCreate={handleAddState} busy={creatingState} />
+          )}
+
+          {/* ── Step 2: District ────────────────────── */}
+          <div style={{ ...F.stepHead, opacity: stateId ? 1 : .45, marginTop: 16 }}>
+            <span style={F.stepNum}>2</span>
+            <span style={F.stepLabel}>District</span>
+            {selectedDistrict && <span style={F.stepDone}>{selectedDistrict.name} ✓</span>}
+          </div>
+          <div style={F.fieldRow}>
+            <select style={{ ...F.input, flex: 1 }} value={districtId} disabled={!stateId}
+              onChange={(e) => setDistrictId(e.target.value)}>
+              <option value="">{stateId ? "Select district..." : "Select a state first"}</option>
+              {districts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <button style={{ ...F.addBtn, opacity: stateId ? 1 : .4 }}
+              disabled={!stateId} onClick={() => setShowNewDistrict((v) => !v)}>
+              {showNewDistrict ? "Cancel" : "+ New"}
+            </button>
+          </div>
+          {showNewDistrict && (
+            <InlineCreate placeholder={`District in ${selectedState?.name || "selected state"}...`}
+              onCreate={handleAddDistrict} busy={creatingDistrict} />
+          )}
+
+          {/* ── Step 3: Site details ────────────────── */}
+          <div style={{ ...F.stepHead, opacity: districtId ? 1 : .45, marginTop: 16 }}>
+            <span style={F.stepNum}>3</span>
+            <span style={F.stepLabel}>Site Details</span>
+          </div>
+
+          <label style={F.label}>Site Name *</label>
+          <input style={F.input} value={form.name} disabled={!districtId}
+            onChange={(e) => set("name", e.target.value)}
+            placeholder="e.g. Main Gate Security Post" />
+
+          <label style={F.label}>Address</label>
+          <textarea style={{ ...F.input, height: 52, resize: "vertical" }} value={form.address}
+            onChange={(e) => set("address", e.target.value)}
+            placeholder="Full postal address (optional)" />
+
+          <div style={F.hint2}>
+            Geofence: employees within the radius are auto-marked Present/Late.
+            Leave lat/lng blank → every check-in goes to <strong>Under Review</strong>.
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+            <div>
+              <label style={F.label}>Latitude</label>
+              <input style={F.input} type="number" step="0.0000001" value={form.lat}
+                onChange={(e) => set("lat", e.target.value)} placeholder="28.8368" />
+            </div>
+            <div>
+              <label style={F.label}>Longitude</label>
+              <input style={F.input} type="number" step="0.0000001" value={form.lng}
+                onChange={(e) => set("lng", e.target.value)} placeholder="77.1084" />
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+            <div>
+              <label style={F.label}>Geofence Radius (m)</label>
+              <input style={F.input} type="number" min="50" value={form.geofence_radius}
+                onChange={(e) => set("geofence_radius", Number(e.target.value))} />
+            </div>
+            <div>
+              <label style={F.label}>Sanctioned Strength</label>
+              <input style={F.input} type="number" min="0" value={form.sanctioned_strength}
+                onChange={(e) => set("sanctioned_strength", Number(e.target.value))} />
+            </div>
+          </div>
+
+          <label style={{ ...F.label, display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+            <input type="checkbox" checked={form.is_active}
+              onChange={(e) => set("is_active", e.target.checked)} />
+            Active Site
+          </label>
+
+          <button style={{ ...F.btn, opacity: saveBusy || !districtId ? .5 : 1, marginTop: 18 }}
+            onClick={handleSave} disabled={saveBusy || !districtId}>
+            {saveBusy ? "Saving..." : isEdit ? "Save Changes" : "Create Site"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Transfer modal ────────────────────────────────────────────
@@ -186,6 +411,7 @@ export default function DeploymentPage() {
   const [selectedSite, setSelectedSite] = useState(null);
   const [stateFilter, setStateFilter]   = useState("");
   const [search, setSearch]             = useState("");
+  const [siteForm, setSiteForm]         = useState(null); // null=closed, true=new, site=edit
 
   const { data: sitesData, isLoading } = useGetSitesQuery();
   const { data: summary }              = useGetSiteSummaryQuery();
@@ -202,14 +428,22 @@ export default function DeploymentPage() {
 
   return (
     <div style={S.page}>
+      {siteForm && (
+        <SiteFormModal
+          site={siteForm === true ? null : siteForm}
+          onClose={() => setSiteForm(null)}
+        />
+      )}
+
       {/* Left — site table */}
       <div style={{ flex: selectedSite ? "1 1 55%" : "1 1 100%", minWidth: 0, transition: "flex .2s" }}>
         {/* Header */}
-        <div style={S.pageHead}>
+        <div style={{ ...S.pageHead, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
             <h1 style={S.h1}>Deployment Management</h1>
             <p style={S.sub}>Site-wise manpower strength · click a site to manage employees</p>
           </div>
+          <button style={S.newBtn} onClick={() => setSiteForm(true)}>+ New Site</button>
         </div>
 
         {/* KPI strip */}
@@ -280,10 +514,14 @@ export default function DeploymentPage() {
                         {fc.label} · {site.fill_pct}%
                       </span>
                     </td>
-                    <td style={S.td}>
+                    <td style={{ ...S.td, display: "flex", gap: 8, alignItems: "center" }}>
                       <span style={S.detailLink}>
                         {active ? "Close ✕" : "Details →"}
                       </span>
+                      <button style={S.editBtn}
+                        onClick={(e) => { e.stopPropagation(); setSiteForm(site); }}>
+                        Edit
+                      </button>
                     </td>
                   </tr>
                 );
@@ -334,6 +572,8 @@ const S = {
   badge:     { display: "inline-flex", padding: "3px 9px", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" },
   detailLink:{ fontSize: 12, color: "#1E3563", fontWeight: 600, cursor: "pointer" },
   panel:     { width: 360, flexShrink: 0, background: "#fff", border: "1px solid #E2E7F0", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 120px)", position: "sticky", top: 0 },
+  newBtn:    { padding: "8px 16px", background: "#1E3563", color: "#fff", border: 0, borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 },
+  editBtn:   { padding: "3px 10px", border: "1px solid #E2E7F0", borderRadius: 7, background: "#fff", fontSize: 11.5, fontWeight: 600, color: "#E8821E", cursor: "pointer", flexShrink: 0 },
 };
 
 const P = {
@@ -379,4 +619,27 @@ const M = {
   sel:     { width: "100%", padding: "10px 12px", border: "1px solid #E2E7F0", borderRadius: 9, fontSize: 13, fontFamily: "inherit", marginBottom: 14, boxSizing: "border-box" },
   btn:     { width: "100%", padding: 12, border: 0, borderRadius: 9, background: "#E8821E", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" },
   success: { textAlign: "center", padding: "20px 0", color: "#15966A", fontWeight: 700, fontSize: 15 },
+};
+
+const F = {
+  overlay:    { position: "fixed", inset: 0, background: "rgba(15,30,61,.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" },
+  box:        { background: "#fff", borderRadius: 14, width: 480, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,.3)" },
+  head:       { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #E2E7F0", position: "sticky", top: 0, background: "#fff" },
+  title:      { fontFamily: "Archivo", fontSize: 15, fontWeight: 700, color: "#0F1E3D" },
+  close:      { background: "none", border: 0, fontSize: 18, cursor: "pointer", color: "#6B7793" },
+  body:       { padding: 20 },
+  stepHead:   { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 },
+  stepNum:    { width: 22, height: 22, borderRadius: "50%", background: "#1E3563", color: "#fff", fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center", flexShrink: 0 },
+  stepLabel:  { fontSize: 13, fontWeight: 700, color: "#0F1E3D" },
+  stepDone:   { fontSize: 12, color: "#15966A", fontWeight: 600, marginLeft: "auto" },
+  fieldRow:   { display: "flex", gap: 8, alignItems: "center" },
+  addBtn:     { padding: "8px 12px", border: "1px solid #1E3563", borderRadius: 8, background: "#fff", color: "#1E3563", fontWeight: 700, fontSize: 12, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" },
+  inlineRow:  { display: "flex", gap: 8, marginTop: 6, padding: "10px 12px", background: "#F4F6FA", borderRadius: 8 },
+  inlineInput:{ flex: 1, padding: "7px 10px", border: "1px solid #E2E7F0", borderRadius: 7, fontSize: 13, fontFamily: "inherit" },
+  inlineBtn:  { padding: "7px 14px", border: 0, borderRadius: 7, background: "#15966A", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", flexShrink: 0 },
+  label:      { display: "block", fontSize: 12, fontWeight: 600, color: "#6B7793", marginBottom: 6, marginTop: 10 },
+  input:      { width: "100%", padding: "9px 12px", border: "1px solid #E2E7F0", borderRadius: 9, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" },
+  hint2:      { fontSize: 11.5, color: "#9AA6BF", marginTop: 8, lineHeight: 1.5, padding: "8px 10px", background: "#FFFBE6", borderRadius: 7, borderLeft: "3px solid #E8821E" },
+  err:        { background: "#FDECEA", color: "#D2453F", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 12 },
+  btn:        { width: "100%", padding: 12, border: 0, borderRadius: 9, background: "#1E3563", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" },
 };

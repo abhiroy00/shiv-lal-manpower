@@ -4,8 +4,6 @@ import {
   ActivityIndicator, Alert, Platform,
 } from "react-native";
 import { useSelector } from "react-redux";
-import * as FileSystem from "expo-file-system/legacy";
-import * as Sharing from "expo-sharing";
 import { useMyPayslipsQuery } from "./payslipApi";
 import { colors } from "../../theme/colors";
 

@@ -30,8 +30,10 @@ def process_check_in(employee, lat, lng, selfie=None):
         return attendance, False
 
     from datetime import datetime
+    from django.conf import settings
     now = datetime.now().time()
-    late_threshold = time(9, 30)
+    h, m = getattr(settings, "LATE_THRESHOLD", (9, 30))
+    late_threshold = time(h, m)
     if geofence_ok:
         attendance.status = "late" if now > late_threshold else "present"
     else:

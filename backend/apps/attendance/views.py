@@ -88,11 +88,50 @@ def _build_register(year, month, site_id=None, district_id=None, search=None):
 
 
 class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Attendance.objects.select_related("employee", "site").all()
+    queryset = Attendance.objects.select_related(
+        "employee", "site", "reviewed_by"
+    ).all()
     serializer_class = AttendanceSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["employee", "date", "status", "site"]
+
+    def _late_threshold(self):
+        from django.conf import settings
+        from datetime import time
+        h, m = getattr(settings, "LATE_THRESHOLD", (9, 30))
+        return time(h, m)
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        """HR/Admin: approve a review attendance → auto-determine present/late from check_in_time."""
+        if request.user.role not in ("admin", "hr"):
+            return Response({"detail": "Permission denied."}, status=403)
+        att = self.get_object()
+        if att.status != "review":
+            return Response({"detail": "Only 'review' attendance can be approved."}, status=400)
+        threshold = self._late_threshold()
+        att.status      = "late" if (att.check_in_time and att.check_in_time > threshold) else "present"
+        att.reviewed_by = request.user
+        att.reviewed_at = timezone.now()
+        att.review_note = request.data.get("note", "")
+        att.save()
+        return Response(AttendanceSerializer(att).data)
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        """HR/Admin: reject a review attendance → mark absent."""
+        if request.user.role not in ("admin", "hr"):
+            return Response({"detail": "Permission denied."}, status=403)
+        att = self.get_object()
+        if att.status != "review":
+            return Response({"detail": "Only 'review' attendance can be rejected."}, status=400)
+        att.status      = "absent"
+        att.reviewed_by = request.user
+        att.reviewed_at = timezone.now()
+        att.review_note = request.data.get("note", "")
+        att.save()
+        return Response(AttendanceSerializer(att).data)
 
     @action(detail=False, methods=["post"], url_path="mark",
             permission_classes=[IsAuthenticated])
@@ -130,6 +169,17 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
                 "geofence_ok": True,
             },
         )
+        # If no check_in_time yet, set one so the mobile app can display it
+        if not att.check_in_time:
+            from datetime import datetime, time as dt_time
+            from django.utils.dateparse import parse_time
+            raw_time = request.data.get("check_in_time")
+            if raw_time:
+                att.check_in_time = parse_time(raw_time)
+            else:
+                threshold = self._late_threshold()
+                att.check_in_time = datetime.now().time() if new_status == "late" else threshold
+            att.save(update_fields=["check_in_time"])
         return Response({"detail": "Attendance saved.", "status": att.status})
 
     @action(detail=False, methods=["get"], url_path="register")

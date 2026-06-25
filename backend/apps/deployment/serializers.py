@@ -18,8 +18,9 @@ class DistrictSerializer(serializers.ModelSerializer):
 
 
 class SiteSerializer(serializers.ModelSerializer):
-    district_name  = serializers.CharField(source="district.name",       read_only=True)
-    state_name     = serializers.CharField(source="district.state.name", read_only=True)
+    district_name    = serializers.CharField(source="district.name",       read_only=True)
+    state_name       = serializers.CharField(source="district.state.name", read_only=True)
+    district_state_id = serializers.IntegerField(source="district.state.id", read_only=True)
     deployed_count = serializers.SerializerMethodField()
     present_today  = serializers.SerializerMethodField()
     vacancy        = serializers.SerializerMethodField()

@@ -12,9 +12,9 @@ export default function DashboardLayout() {
   const user = useSelector((s) => s.auth.user);
 
   const handleLogout = () => {
-    dispatch(baseApi.util.resetApiState());
-    dispatch(logout());
-    navigate("/login");
+    dispatch(logout());          // clear auth first
+    navigate("/login");          // navigate before any async side-effects
+    dispatch(baseApi.util.resetApiState()); // flush RTK cache last
   };
 
   return (

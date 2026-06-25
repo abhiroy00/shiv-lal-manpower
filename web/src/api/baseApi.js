@@ -28,8 +28,11 @@ const baseQueryWithReauth = async (args, api, extra) => {
           extra
         );
         if (refreshRes.data) {
-          api.dispatch(setCredentials({ accessToken: refreshRes.data.access }));
-          result = await rawBaseQuery(args, api, extra);
+          // Guard: if the user logged out while the refresh was in-flight, discard
+          if (api.getState().auth.refreshToken !== null) {
+            api.dispatch(setCredentials({ accessToken: refreshRes.data.access }));
+            result = await rawBaseQuery(args, api, extra);
+          }
         } else {
           api.dispatch(logout());
         }
@@ -47,9 +50,14 @@ const baseQueryWithReauth = async (args, api, extra) => {
 export const baseApi = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth,
+  // Refetch if cached data is older than 30 s when a component mounts,
+  // and whenever the browser tab regains focus.
+  refetchOnMountOrArgChange: 30,
+  refetchOnFocus: true,
   tagTypes: [
-    "Employee", "Attendance", "Payroll", "Payslip", "SalaryStructure",
+    "Employee", "Attendance", "AttendanceReview", "Payroll", "Payslip", "SalaryStructure",
     "Compliance", "Recruitment", "Deployment", "Dashboard", "User", "Leave",
+    "State", "District",
   ],
   endpoints: () => ({}),
 });

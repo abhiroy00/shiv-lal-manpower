@@ -57,6 +57,12 @@ class Attendance(TimeStampedModel):
     site = models.ForeignKey(
         "deployment.Site", null=True, blank=True, on_delete=models.SET_NULL
     )
+    reviewed_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="reviewed_attendances",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(blank=True)
 
     class Meta:
         unique_together = ("employee", "date")

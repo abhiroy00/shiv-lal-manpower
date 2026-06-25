@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator, ScrollView,
+  ActivityIndicator, ScrollView, Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,6 +23,7 @@ export default function AttendanceScreen() {
 
   const { data: today, isLoading: todayLoading, refetch } = useMyTodayQuery();
   const [checkOut, { isLoading: outLoading }] = useCheckOutMutation();
+  const [confirmCheckout, setConfirmCheckout] = useState(false);
 
   const handleCheckIn = async () => {
     if (!cameraPermission?.granted) await requestCameraPermission();
@@ -66,21 +67,28 @@ export default function AttendanceScreen() {
     }
   };
 
-  const handleCheckOut = async () => {
-    Alert.alert("Check Out", "Confirm check-out for today?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Confirm",
-        onPress: async () => {
-          try {
-            await checkOut().unwrap();
-            Alert.alert("Checked Out", "Your check-out time has been recorded.");
-          } catch (e) {
-            Alert.alert("Error", e.data?.detail || "Check-out failed");
-          }
-        },
-      },
-    ]);
+  const performCheckOut = async () => {
+    setConfirmCheckout(false);
+    try {
+      await checkOut().unwrap();
+      refetch();
+      Alert.alert("Checked Out", "Your check-out time has been recorded.");
+    } catch (e) {
+      const msg = e?.data?.detail ?? e?.error ?? "Check-out failed. Check your connection.";
+      Alert.alert("Error", msg);
+    }
+  };
+
+  const handleCheckOut = () => {
+    if (Platform.OS === "web") {
+      // window.confirm() can be silently suppressed by browsers — use inline confirm instead
+      setConfirmCheckout(true);
+    } else {
+      Alert.alert("Check Out", "Confirm check-out for today?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Confirm", onPress: performCheckOut },
+      ]);
+    }
   };
 
   if (showCamera) {
@@ -187,13 +195,29 @@ export default function AttendanceScreen() {
             <Text style={S.btnText}>  Capture & Check In</Text>
           </TouchableOpacity>
         ) : !isCheckedOut ? (
-          <TouchableOpacity style={[S.btn, { backgroundColor: colors.ink }]}
-            onPress={handleCheckOut} disabled={outLoading} activeOpacity={0.8}>
-            <Ionicons name="log-out-outline" size={20} color="#fff" />
-            <Text style={S.btnText}>
-              {outLoading ? "  Checking out..." : "  Check Out"}
-            </Text>
-          </TouchableOpacity>
+          confirmCheckout ? (
+            <View style={S.confirmBox}>
+              <Text style={S.confirmText}>Confirm check-out for today?</Text>
+              <View style={S.confirmRow}>
+                <TouchableOpacity style={[S.confirmBtn, { backgroundColor: colors.ink }]}
+                  onPress={performCheckOut} disabled={outLoading}>
+                  <Text style={S.confirmBtnText}>
+                    {outLoading ? "Checking out..." : "Yes, Check Out"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[S.confirmBtn, { backgroundColor: colors.muted }]}
+                  onPress={() => setConfirmCheckout(false)}>
+                  <Text style={S.confirmBtnText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity style={[S.btn, { backgroundColor: colors.ink }]}
+              onPress={handleCheckOut} disabled={outLoading} activeOpacity={0.8}>
+              <Ionicons name="log-out-outline" size={20} color="#fff" />
+              <Text style={S.btnText}>  Check Out</Text>
+            </TouchableOpacity>
+          )
         ) : (
           <View style={[S.btn, { backgroundColor: colors.green }]}>
             <Ionicons name="checkmark-circle" size={20} color="#fff" />
@@ -260,6 +284,11 @@ const S = StyleSheet.create({
   btnArea:        { padding: 16 },
   btn:            { backgroundColor: colors.saffron, borderRadius: 14, padding: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", elevation: 4, shadowColor: colors.saffron, shadowOpacity: 0.35, shadowRadius: 10 },
   btnText:        { color: "#fff", fontWeight: "700", fontSize: 16 },
+  confirmBox:     { backgroundColor: "#fff", borderRadius: 14, padding: 20, elevation: 3, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 10 },
+  confirmText:    { fontSize: 15, fontWeight: "600", color: colors.ink, textAlign: "center", marginBottom: 16 },
+  confirmRow:     { flexDirection: "row", gap: 10 },
+  confirmBtn:     { flex: 1, borderRadius: 12, padding: 14, alignItems: "center" },
+  confirmBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   infoCard:       { backgroundColor: "#fff", margin: 16, borderRadius: 14, padding: 16 },
   infoTitle:      { fontSize: 13, fontWeight: "700", color: colors.ink, marginBottom: 12 },
   infoRow:        { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.line, gap: 12 },
