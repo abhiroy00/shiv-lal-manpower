@@ -37,8 +37,6 @@ services:
       POSTGRES_PASSWORD: shivlal
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U shivlal -d shivlal_db"]
       interval: 5s
@@ -49,8 +47,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -66,6 +62,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend:/app
+      - backend_venv:/app/.venv
       - media_data:/app/media
     ports:
       - "8000:8000"
@@ -83,6 +80,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend:/app
+      - backend_venv:/app/.venv
       - media_data:/app/media
     <<: *backend-env
     depends_on:
@@ -98,6 +96,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend:/app
+      - backend_venv:/app/.venv
     <<: *backend-env
     depends_on:
       db:
@@ -124,3 +123,4 @@ services:
 volumes:
   postgres_data:
   media_data:
+  backend_venv:
