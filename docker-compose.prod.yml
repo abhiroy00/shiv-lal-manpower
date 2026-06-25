@@ -22,7 +22,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -59,7 +59,7 @@ services:
   # ── Celery Worker ──────────────────────────────────────────────────────────
   celery:
     image: ghcr.io/${IMAGE_OWNER}/shivlal-backend:latest
-    command: celery -A config worker -l info -Q celery --concurrency=4
+    command: uv run celery -A config worker -l info -Q celery --concurrency=4
     restart: always
     volumes:
       - media_data:/app/media
@@ -73,7 +73,7 @@ services:
   # ── Celery Beat (scheduled tasks) ──────────────────────────────────────────
   celery-beat:
     image: ghcr.io/${IMAGE_OWNER}/shivlal-backend:latest
-    command: celery -A config beat -l info
+    command: uv run celery -A config beat -l info
     restart: always
     <<: *backend-env
     depends_on:
