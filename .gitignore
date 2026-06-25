@@ -34,6 +34,7 @@ coverage.xml
 .env
 .env.*
 !.env.example
+!.env.prod.example
 
 # ─── Node / Web ───────────────────────────────────────────────────────────────
 node_modules/
