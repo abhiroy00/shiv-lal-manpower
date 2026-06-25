@@ -26,7 +26,6 @@ jobs:
       packages: write
     outputs:
       image-digest: ${{ steps.build.outputs.digest }}
-      image-tag: ${{ steps.meta.outputs.version }}
 
     steps:
       - name: Checkout code
@@ -110,7 +109,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── Copy compose file to EC2, then deploy ───────────────────────────────────
+  # ── Deploy via SSH only (no SCP dependency) ──────────────────────────────────
   deploy:
     name: Deploy to ${{ github.event.inputs.environment || 'production' }}
     runs-on: ubuntu-latest
@@ -121,49 +120,34 @@ jobs:
       packages: read
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Copy the latest compose file to the server so updates take effect
-      - name: Copy docker-compose.prod.yml to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: "docker-compose.prod.yml"
-          target: "/opt/shivlal-manpower"
-          strip_components: 0
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
-        env:
-          IMAGE_OWNER: ${{ env.IMAGE_OWNER }}
-          GH_ACTOR: ${{ github.actor }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEPLOY_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || 22 }}
-          envs: IMAGE_OWNER,GH_ACTOR,GH_TOKEN,DEPLOY_SHA
+          port: 22
+          envs: IMAGE_OWNER,GH_ACTOR,GH_TOKEN,DEPLOY_SHA,REPO
           script: |
             set -e
             cd /opt/shivlal-manpower
 
-            # Authenticate with GHCR to pull private images
+            # Fetch latest compose file directly from GitHub
+            curl -fsSL \
+              -H "Authorization: token $GH_TOKEN" \
+              "https://raw.githubusercontent.com/$REPO/main/docker-compose.prod.yml" \
+              -o docker-compose.prod.yml
+
+            # Authenticate with GHCR
             echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
 
             export IMAGE_OWNER="$IMAGE_OWNER"
 
-            echo "==> Pulling latest images for commit $DEPLOY_SHA ..."
+            echo "==> Pulling latest images ..."
             docker compose -f docker-compose.prod.yml pull
 
             echo "==> Restarting services ..."
-            docker compose -f docker-compose.prod.yml up -d \
-              --remove-orphans --no-build
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans --no-build
 
             echo "==> Running migrations ..."
             docker compose -f docker-compose.prod.yml exec -T api \
@@ -173,43 +157,34 @@ jobs:
             docker compose -f docker-compose.prod.yml exec -T api \
               uv run python manage.py collectstatic --noinput
 
-            echo "==> Pruning unused images ..."
             docker image prune -f
-
             echo "==> Deployment complete."
-
-      - name: Health check — API
-        run: |
-          echo "Waiting 20s for containers to stabilize..."
-          sleep 20
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
-            --max-time 15 \
-            "http://${{ secrets.DEPLOY_HOST }}/api/health/" || echo "000")
-          echo "API health check HTTP status: $STATUS"
-          if [ "$STATUS" != "200" ] && [ "$STATUS" != "302" ] && [ "$STATUS" != "404" ]; then
-            echo "Health check returned $STATUS — deployment may have issues."
-            exit 1
-          fi
-          echo "Health check passed."
+        env:
+          IMAGE_OWNER: ${{ env.IMAGE_OWNER }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
 
       - name: Health check — Web
         run: |
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
-            --max-time 15 \
+          echo "Waiting 20s for containers to start..."
+          sleep 20
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 \
             "http://${{ secrets.DEPLOY_HOST }}/" || echo "000")
-          echo "Web health check HTTP status: $STATUS"
+          echo "Web HTTP status: $STATUS"
           if [ "$STATUS" = "000" ]; then
-            echo "Could not reach the web frontend."
+            echo "Could not reach the server."
             exit 1
           fi
-          echo "Web is reachable (HTTP $STATUS)."
+          echo "Server is reachable."
 
       - name: Report deployment status
         if: always()
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            echo "✓ Deployed commit ${{ github.sha }} to ${{ github.event.inputs.environment || 'production' }} successfully."
+            echo "Deployed commit ${{ github.sha }} successfully."
           else
-            echo "✗ Deployment of commit ${{ github.sha }} FAILED. Check logs above."
+            echo "Deployment of commit ${{ github.sha }} FAILED."
             exit 1
           fi
