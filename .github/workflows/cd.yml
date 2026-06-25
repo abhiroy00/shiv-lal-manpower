@@ -107,6 +107,7 @@ jobs:
     name: Deploy to production
     runs-on: ubuntu-latest
     needs: [build-backend, build-web]
+    environment: shivlal_deploy
     permissions:
       contents: read
       packages: read
@@ -115,8 +116,8 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
+          host: "35.154.142.95"
+          username: "ec2-user"
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: 22
           envs: IMAGE_OWNER,GH_ACTOR,GH_TOKEN,DEPLOY_SHA,REPO
@@ -163,7 +164,7 @@ jobs:
           echo "Waiting 20s for containers to start..."
           sleep 20
           STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 \
-            "http://${{ secrets.DEPLOY_HOST }}/" || echo "000")
+            "http://35.154.142.95/" || echo "000")
           echo "Web HTTP status: $STATUS"
           if [ "$STATUS" = "000" ]; then
             echo "Could not reach the server."
