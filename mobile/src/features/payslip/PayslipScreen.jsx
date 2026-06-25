@@ -1,13 +1,21 @@
 import React, { useState } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, Platform,
 } from "react-native";
 import { useSelector } from "react-redux";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { useMyPayslipsQuery } from "./payslipApi";
 import { colors } from "../../theme/colors";
+
+// expo-file-system and expo-sharing are native-only; import lazily to avoid
+// crashing the web bundler which can't resolve native modules.
+let FileSystem, Sharing;
+if (Platform.OS !== "web") {
+  FileSystem = require("expo-file-system");
+  Sharing    = require("expo-sharing");
+}
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -25,26 +33,45 @@ function SlipDetail({ slip, onClose }) {
     setDownloading(true);
     try {
       const filename = `payslip_${slip.month}_${slip.year}.pdf`;
-      const fileUri  = FileSystem.documentDirectory + filename;
 
-      const result = await FileSystem.downloadAsync(slip.pdf_url, fileUri, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      if (result.status !== 200) {
-        Alert.alert("Error", "Could not download payslip. Please try again.");
-        return;
-      }
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(result.uri, {
-          mimeType: "application/pdf",
-          dialogTitle: "Open Payslip PDF",
-          UTI: "com.adobe.pdf",
+      if (Platform.OS === "web") {
+        // Browser: fetch with auth header → blob → anchor download
+        const res = await fetch(slip.pdf_url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
         });
+        if (!res.ok) {
+          Alert.alert("Error", "Could not download payslip. Please try again.");
+          return;
+        }
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
       } else {
-        Alert.alert("Saved", `Payslip saved to:\n${result.uri}`);
+        // Native: download to device then open share sheet
+        const fileUri = FileSystem.documentDirectory + filename;
+        const result  = await FileSystem.downloadAsync(slip.pdf_url, fileUri, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        if (result.status !== 200) {
+          Alert.alert("Error", "Could not download payslip. Please try again.");
+          return;
+        }
+
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(result.uri, {
+            mimeType: "application/pdf",
+            dialogTitle: "Open Payslip PDF",
+            UTI: "com.adobe.pdf",
+          });
+        } else {
+          Alert.alert("Saved", `Payslip saved to:\n${result.uri}`);
+        }
       }
     } catch (e) {
       Alert.alert("Error", "Failed to download payslip PDF.");

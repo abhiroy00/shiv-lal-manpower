@@ -85,3 +85,4 @@ Desktop.ini
 # ─── Docker ───────────────────────────────────────────────────────────────────
 # Don't ignore docker-compose files themselves, but ignore local overrides
 docker-compose.override.yml
+mobile/package-lock.json

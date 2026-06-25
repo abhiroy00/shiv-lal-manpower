@@ -117,7 +117,11 @@ export default function EmployeeForm({ employee, onClose }) {
       return;
     }
 
-    const payload = { ...form, site: form.site || null };
+    const payload = {
+      ...form,
+      site:          form.site          || null,
+      date_of_birth: form.date_of_birth || null,
+    };
     try {
       let empId;
       let newCredentials = null;
