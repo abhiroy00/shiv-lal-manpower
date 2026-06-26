@@ -5,6 +5,7 @@ export const attendanceApi = baseApi.injectEndpoints({
     myToday: build.query({
       query: () => "/attendance/my-today/",
       providesTags: ["Attendance"],
+      keepUnusedDataFor: 0,
     }),
     myAttendance: build.query({
       query: ({ year, month }) => `/attendance/my/?year=${year}&month=${month}`,

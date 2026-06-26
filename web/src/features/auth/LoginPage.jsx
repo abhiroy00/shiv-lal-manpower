@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { useLoginMutation } from "./authApi";
+import { setCredentials } from "./authSlice";
 
 export default function LoginPage() {
   const [phone, setPhone] = useState("");
@@ -8,11 +10,17 @@ export default function LoginPage() {
   const [role, setRole] = useState("Admin / HR");
   const [login, { isLoading, error }] = useLoginMutation();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await login({ phone, password }).unwrap();
+      const data = await login({ phone, password }).unwrap();
+      const meRes = await fetch("/api/auth/me/", {
+        headers: { Authorization: `Bearer ${data.access}` },
+      });
+      const user = await meRes.json();
+      dispatch(setCredentials({ accessToken: data.access, refreshToken: data.refresh, user }));
       navigate("/dashboard");
     } catch {}
   };

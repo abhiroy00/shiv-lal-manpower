@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSelector } from "react-redux";
 import { useMyTodayQuery } from "../attendance/attendanceApi";
 import { colors } from "../../theme/colors";
@@ -17,7 +18,23 @@ const ACTIONS = [
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const user = useSelector((s) => s.auth.user);
-  const { data: today, isLoading: todayLoading } = useMyTodayQuery();
+  const { data: today, isLoading: todayLoading, isFetching, refetch } = useMyTodayQuery();
+  const [refreshing, setRefreshing] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch]);
 
   const hour      = new Date().getHours();
   const greeting  = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
@@ -39,7 +56,18 @@ export default function HomeScreen({ navigation }) {
     : "Not marked yet";
 
   return (
-    <ScrollView style={S.page} contentContainerStyle={{ paddingBottom: 32 }}>
+    <ScrollView
+      style={S.page}
+      contentContainerStyle={{ paddingBottom: 32 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing || isFetching}
+          onRefresh={onRefresh}
+          colors={[colors.saffron]}
+          tintColor={colors.saffron}
+        />
+      }
+    >
       {/* Header */}
       <View style={[S.header, { paddingTop: (insets.top || 0) + 16 }]}>
         <View style={S.avatar}>
