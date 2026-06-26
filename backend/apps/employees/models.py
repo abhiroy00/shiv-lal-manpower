@@ -25,6 +25,7 @@ class Employee(TimeStampedModel):
     pan = models.CharField(max_length=10, blank=True)
     bank_account = models.CharField(max_length=20, blank=True)
     ifsc = models.CharField(max_length=11, blank=True)
+    tds = models.CharField(max_length=30, blank=True)
     date_joined = models.DateField()
     date_of_birth = models.DateField(null=True, blank=True)
     address = models.TextField(blank=True)

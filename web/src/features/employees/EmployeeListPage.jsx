@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSelector } from "react-redux";
-import { useGetEmployeesQuery } from "./employeesApi";
+import { useGetEmployeesQuery, useDeleteEmployeeMutation } from "./employeesApi";
 import EmployeeForm from "./EmployeeForm";
 
 const STATUS_COLORS = {
@@ -16,6 +16,7 @@ export default function EmployeeListPage() {
   const [status, setStatus]             = useState("");
   const [page, setPage]                 = useState(1);
   const [formEmployee, setFormEmployee] = useState(null); // null=closed, {}=add, obj=edit
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const { data, isLoading } = useGetEmployeesQuery({
     search, status: status || undefined, page, page_size: PAGE_SIZE,
@@ -24,8 +25,20 @@ export default function EmployeeListPage() {
   const employees  = data?.results || [];
   const totalPages = data?.count ? Math.ceil(data.count / PAGE_SIZE) : 1;
 
+  const [deleteEmployee, { isLoading: deleting }] = useDeleteEmployeeMutation();
+
   const accessToken = useSelector((s) => s.auth.accessToken);
   const [exporting, setExporting] = useState(false);
+
+  const handleDelete = async (id) => {
+    try {
+      await deleteEmployee(id).unwrap();
+      setConfirmDeleteId(null);
+    } catch {
+      alert("Failed to delete employee. Please try again.");
+      setConfirmDeleteId(null);
+    }
+  };
 
   const openAdd   = ()    => setFormEmployee({});
   const openEdit  = (emp) => setFormEmployee(emp);
@@ -133,10 +146,34 @@ export default function EmployeeListPage() {
                         {emp.status.replace("_", " ")}
                       </span>
                     </td>
-                    <td style={S.td}>
-                      <span style={S.link} onClick={(e) => { e.stopPropagation(); openEdit(emp); }}>
-                        Edit
-                      </span>
+                    <td style={S.td} onClick={(e) => e.stopPropagation()}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <button style={S.actionBtn} onClick={() => openEdit(emp)}>Edit</button>
+                        {confirmDeleteId === emp.id ? (
+                          <>
+                            <button
+                              style={{ ...S.actionBtn, ...S.deleteBtnConfirm }}
+                              onClick={() => handleDelete(emp.id)}
+                              disabled={deleting}
+                            >
+                              {deleting ? "…" : "Confirm"}
+                            </button>
+                            <button
+                              style={{ ...S.actionBtn, color: "#6B7793" }}
+                              onClick={() => setConfirmDeleteId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            style={{ ...S.actionBtn, ...S.deleteBtn }}
+                            onClick={() => setConfirmDeleteId(emp.id)}
+                          >
+                            🗑
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -204,6 +241,9 @@ const S = {
   empCode: { fontSize: 11, color: "#6B7793" },
   pill: { display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 30, fontSize: 11.5, fontWeight: 600 },
   link: { color: "#E8821E", fontWeight: 600, cursor: "pointer", fontSize: 12.5 },
+  actionBtn: { padding: "4px 10px", borderRadius: 7, border: "1px solid #E2E7F0", background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#E8821E", fontFamily: "inherit" },
+  deleteBtn: { color: "#D2453F", border: "1px solid #f5c6c4" },
+  deleteBtnConfirm: { color: "#fff", background: "#D2453F", border: "1px solid #D2453F" },
   loginBadge: { fontSize: 10, fontWeight: 700, color: "#1E3563", background: "#D9E3F7", borderRadius: 4, padding: "1px 5px" },
   empty: { textAlign: "center", padding: 32, color: "#6B7793" },
   pagination: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", gap: 8 },

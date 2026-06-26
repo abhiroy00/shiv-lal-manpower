@@ -17,11 +17,13 @@ const DESIGNATIONS = [
 
 const TABS = ["Basic Info", "Deployment", "Compliance & ID", "Banking", "Salary"];
 
+const TODAY = new Date().toISOString().split("T")[0];
+
 const EMPTY = {
   emp_code: "", full_name: "", phone: "", designation: "",
   status: "active", date_joined: "", date_of_birth: "", address: "",
   site: "", uan: "", esic_no: "", aadhar: "", pan: "",
-  bank_account: "", ifsc: "",
+  bank_account: "", ifsc: "", tds: "",
 };
 
 export default function EmployeeForm({ employee, onClose }) {
@@ -62,6 +64,7 @@ export default function EmployeeForm({ employee, onClose }) {
         pan:           employee.pan           || "",
         bank_account:  employee.bank_account  || "",
         ifsc:          employee.ifsc          || "",
+        tds:           employee.tds           || "",
       });
     } else {
       setForm(EMPTY);
@@ -272,10 +275,13 @@ export default function EmployeeForm({ employee, onClose }) {
 
               <div style={S.row2}>
                 <Field label="Date of Joining *" error={errors.date_joined}>
-                  <input type="date" style={inputStyle("date_joined")} value={form.date_joined} onChange={set("date_joined")} />
+                  <input type="date" style={{ ...inputStyle("date_joined"), ...S.dateInput }}
+                    value={form.date_joined} onChange={set("date_joined")} max={TODAY} />
                 </Field>
                 <Field label="Date of Birth">
-                  <input type="date" style={S.input} value={form.date_of_birth} onChange={set("date_of_birth")} />
+                  <input type="date" style={{ ...S.input, ...S.dateInput }}
+                    value={form.date_of_birth} onChange={set("date_of_birth")}
+                    max={TODAY} min="1950-01-01" />
                 </Field>
               </div>
 
@@ -325,9 +331,19 @@ export default function EmployeeForm({ employee, onClose }) {
                     placeholder="12-digit Aadhar" maxLength={12} />
                 </Field>
                 <Field label="PAN Number" error={errors.pan}>
-                  <input style={inputStyle("pan")} value={form.pan.toUpperCase()} onChange={set("pan")}
+                  <input style={inputStyle("pan")} value={form.pan}
+                    onChange={(e) => setForm((f) => ({ ...f, pan: e.target.value.toUpperCase() }))}
                     placeholder="ABCDE1234F" maxLength={10} />
                 </Field>
+              </div>
+              <Field label="TDS (Monthly Deduction / Declaration)" error={errors.tds}>
+                <input style={inputStyle("tds")} value={form.tds} onChange={set("tds")}
+                  placeholder="e.g. ₹500/month · 10% · Exempt – Form 15G filed" maxLength={30} />
+              </Field>
+              <div style={S.infoBox}>
+                <b>EPF:</b> UAN is the 12-digit Universal Account Number linked to the employee's EPF account. &nbsp;
+                <b>ESIC:</b> 10-digit insurance number. &nbsp;
+                <b>TDS:</b> Monthly tax deduction amount or declaration reference.
               </div>
             </div>
           )}
@@ -340,7 +356,8 @@ export default function EmployeeForm({ employee, onClose }) {
                   placeholder="Account number" />
               </Field>
               <Field label="IFSC Code" error={errors.ifsc}>
-                <input style={inputStyle("ifsc")} value={form.ifsc.toUpperCase()} onChange={set("ifsc")}
+                <input style={inputStyle("ifsc")} value={form.ifsc}
+                  onChange={(e) => setForm((f) => ({ ...f, ifsc: e.target.value.toUpperCase() }))}
                   placeholder="e.g. SBIN0001234" maxLength={11} />
               </Field>
               <div style={S.infoBox}>
@@ -485,7 +502,8 @@ const S = {
     borderRadius: 9, fontSize: 13.5, fontFamily: "inherit", background: "#fff",
     boxSizing: "border-box",
   },
-  errMsg: { fontSize: 11.5, color: "#D2453F", marginTop: 4 },
+  errMsg:    { fontSize: 11.5, color: "#D2453F", marginTop: 4 },
+  dateInput: { colorScheme: "light", cursor: "pointer" },
   infoBox: {
     fontSize: 12.5, color: "#8a5310", background: "#FCEFDD",
     border: "1px solid #f2d9b8", borderRadius: 10, padding: "11px 14px", marginTop: 8,
