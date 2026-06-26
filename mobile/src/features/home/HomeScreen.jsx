@@ -71,7 +71,7 @@ export default function HomeScreen({ navigation }) {
       {/* Header */}
       <View style={[S.header, { paddingTop: (insets.top || 0) + 16 }]}>
         <Image
-          source={require("../../../assets/logo.png")}
+          source={require("../../../assets/shivlal_logo.jpeg")}
           style={S.logoImg}
           resizeMode="contain"
         />
