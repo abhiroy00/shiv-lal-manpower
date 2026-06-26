@@ -87,7 +87,7 @@ services:
     image: ghcr.io/${IMAGE_OWNER}/shivlal-web:latest
     restart: always
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - api
 
