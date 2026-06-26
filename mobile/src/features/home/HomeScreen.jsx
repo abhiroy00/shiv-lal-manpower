@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -70,9 +70,11 @@ export default function HomeScreen({ navigation }) {
     >
       {/* Header */}
       <View style={[S.header, { paddingTop: (insets.top || 0) + 16 }]}>
-        <View style={S.avatar}>
-          <Text style={S.avatarTxt}>{firstName.slice(0, 2).toUpperCase()}</Text>
-        </View>
+        <Image
+          source={require("../../../assets/logo.png")}
+          style={S.logoImg}
+          resizeMode="contain"
+        />
         <View style={{ flex: 1 }}>
           <Text style={S.greeting}>{greeting},</Text>
           <Text style={S.name}>{firstName}</Text>
@@ -141,8 +143,7 @@ const S = StyleSheet.create({
   page:          { flex: 1, backgroundColor: "#F4F6FA" },
 
   header:        { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingBottom: 20, backgroundColor: colors.ink, gap: 14 },
-  avatar:        { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.saffron, justifyContent: "center", alignItems: "center" },
-  avatarTxt:     { color: "#fff", fontWeight: "800", fontSize: 17 },
+  logoImg:       { width: 48, height: 48, borderRadius: 10 },
   greeting:      { color: "rgba(255,255,255,.55)", fontSize: 12 },
   name:          { color: "#fff", fontSize: 20, fontWeight: "800" },
   empBadge:      { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,.1)", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(255,255,255,.12)" },

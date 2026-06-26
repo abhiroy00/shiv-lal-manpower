@@ -289,6 +289,22 @@ export default function EmployeeForm({ employee, onClose }) {
                 <textarea style={{ ...S.input, height: 72, resize: "vertical" }}
                   value={form.address} onChange={set("address")} placeholder="Full residential address" />
               </Field>
+
+              {isEdit && employee?.has_login && (
+                <div style={S.pwdStatusBox}>
+                  <span style={S.pwdStatusIcon}>{employee.password_changed_at ? "🔒" : "⚠️"}</span>
+                  <div>
+                    <div style={S.pwdStatusTitle}>
+                      {employee.password_changed_at ? "Custom password set" : "Using default password"}
+                    </div>
+                    <div style={S.pwdStatusSub}>
+                      {employee.password_changed_at
+                        ? `Changed on ${new Date(employee.password_changed_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
+                        : `Default is the phone number: ${employee.phone}`}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -544,6 +560,15 @@ const S = {
   },
   grossLabel: { fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.7)" },
   grossVal:   { fontSize: 18, fontWeight: 800, color: "#fff", fontFamily: "Archivo" },
+  // Password status
+  pwdStatusBox: {
+    display: "flex", alignItems: "flex-start", gap: 10, marginTop: 14,
+    background: "#F4F6FA", border: "1px solid #E2E7F0", borderRadius: 10,
+    padding: "12px 14px",
+  },
+  pwdStatusIcon:  { fontSize: 18, flexShrink: 0 },
+  pwdStatusTitle: { fontSize: 12.5, fontWeight: 700, color: "#0F1E3D" },
+  pwdStatusSub:   { fontSize: 11.5, color: "#6B7793", marginTop: 2 },
   // Credentials modal
   modalWrap: {
     position: "fixed", inset: 0, zIndex: 200,

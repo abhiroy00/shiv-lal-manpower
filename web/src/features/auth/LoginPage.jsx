@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { useLoginMutation } from "./authApi";
 import { setCredentials } from "./authSlice";
+import { ShivLalLogoFull } from "../../components/ShivLalLogo";
 
 export default function LoginPage() {
   const [phone, setPhone] = useState("");
@@ -28,6 +29,7 @@ export default function LoginPage() {
   return (
     <div style={styles.wrap}>
       <div style={styles.brand}>
+        <ShivLalLogoFull width={160} />
         <div style={styles.eyebrow}>Manpower Operations Console</div>
         <h1 style={styles.h1}>Shiv Lal Manpower<br />Management Portal</h1>
         <p style={styles.tagline}>

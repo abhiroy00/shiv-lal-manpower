@@ -13,7 +13,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
     site_name     = serializers.CharField(source="site.name", read_only=True)
     district_name = serializers.CharField(source="site.district.name", read_only=True)
     state_name    = serializers.CharField(source="site.district.state.name", read_only=True)
-    has_login     = serializers.SerializerMethodField()
+    has_login           = serializers.SerializerMethodField()
+    password_changed_at = serializers.SerializerMethodField()
 
     class Meta:
         model  = Employee
@@ -25,6 +26,12 @@ class EmployeeSerializer(serializers.ModelSerializer):
             return obj.user_account is not None
         except Exception:
             return False
+
+    def get_password_changed_at(self, obj):
+        try:
+            return obj.user_account.password_changed_at
+        except Exception:
+            return None
 
 
 class EmployeeListSerializer(serializers.ModelSerializer):

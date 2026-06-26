@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../features/auth/authSlice";
 import { baseApi } from "../api/baseApi";
 import { NAV } from "../constants/nav";
+import ShivLalLogo from "../components/ShivLalLogo";
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -22,7 +23,7 @@ export default function DashboardLayout() {
       {/* Sidebar */}
       <aside style={{ ...S.sidebar, ...(sidebarOpen ? S.sidebarOpen : {}) }}>
         <div style={S.brand}>
-          <div style={S.logoMark}>SL</div>
+          <ShivLalLogo size={40} />
           <div>
             <div style={S.brandName}>Shiv Lal Manpower</div>
             <div style={S.brandSub}>Operations Console</div>

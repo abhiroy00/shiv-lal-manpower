@@ -62,6 +62,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         except Exception:
             return Response({"detail": "No login account found for this employee."}, status=400)
         user.set_password(employee.phone)
+        user.password_changed_at = None
         user.save()
         return Response({
             "detail": "Password reset successfully.",
