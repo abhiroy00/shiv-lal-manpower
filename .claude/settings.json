@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(python -c ' *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(node -e ' *)",
+      "PowerShell(netsh advfirewall firewall show rule name=\"Expo Metro\" 2>$null)",
+      "PowerShell(if \\(-not $?\\) { \"Rule does not exist\" })",
+      "PowerShell(netstat -ano)",
+      "PowerShell(netsh advfirewall firewall add rule name=\"Expo Metro 8081\" dir=in action=allow protocol=TCP localport=8081)",
+      "PowerShell(netsh advfirewall firewall add rule name=\"Expo Metro 8082\" dir=in action=allow protocol=TCP localport=8082)",
+      "PowerShell(netsh advfirewall firewall add rule name=\"Expo DevTools 19000\" dir=in action=allow protocol=TCP localport=19000)",
+      "PowerShell(netsh advfirewall firewall add rule name=\"Expo DevTools 19001\" dir=in action=allow protocol=TCP localport=19001)",
+      "Bash(ngrok --version)",
+      "Bash(ngrok http *)"
     ]
   }
 }

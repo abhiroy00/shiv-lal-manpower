@@ -84,7 +84,7 @@ function SlipDetail({ slip, onClose }) {
       <View style={D.head}>
         <View>
           <Text style={D.headMonth}>{MONTHS[slip.month - 1]} {slip.year}</Text>
-          <Text style={D.headStatus}>{slip.run_status.toUpperCase()}</Text>
+          <Text style={D.headStatus}>{(slip.run_status ?? "draft").toUpperCase()}</Text>
         </View>
         <TouchableOpacity style={D.closeBtn} onPress={onClose}>
           <Text style={D.closeTxt}>← Back</Text>

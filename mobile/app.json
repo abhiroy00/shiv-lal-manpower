@@ -30,6 +30,7 @@
         "ACCESS_COARSE_LOCATION",
         "CAMERA"
       ],
+      "usesCleartextTraffic": true,
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyCJ-pctI9aBhLlueVMsYyQtmbF70TnAEVg"
@@ -46,7 +47,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Required for GPS attendance check-in."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }
