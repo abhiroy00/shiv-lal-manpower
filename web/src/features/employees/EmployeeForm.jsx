@@ -168,20 +168,19 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
         empId = result.id;
         if (result.credentials) {
           newCredentials = result.credentials;
-          setCredentials(result.credentials);
         }
-        // Upload any queued documents right after creation
-        let docsFailed = 0;
+        // Upload queued documents BEFORE showing the credentials modal
         for (const pd of pendingDocs) {
           const fd = new FormData();
           fd.append("doc_type", pd.docType);
           fd.append("file", pd.file);
           try { await uploadDoc({ id: empId, formData: fd }).unwrap(); }
-          catch { docsFailed++; }
+          catch { /* individual doc failure — non-fatal */ }
         }
         setPendingDocs([]);
-        if (docsFailed > 0) {
-          setUploadErr(`${docsFailed} document(s) failed to upload. Go to the Documents tab after saving to retry.`);
+        // Now show credentials modal (after docs are uploaded)
+        if (newCredentials) {
+          setCredentials(newCredentials);
         }
       }
 
