@@ -22,10 +22,10 @@ export default function DashboardLayout() {
       {/* Sidebar */}
       <aside style={{ ...S.sidebar, ...(sidebarOpen ? S.sidebarOpen : {}) }}>
         <div style={S.brand}>
-          <div style={{ width: 58, height: 58, borderRadius: 12, overflow: "hidden", flexShrink: 0, backgroundColor: "#B71C1C", border: "2.5px solid #D4AF37", boxShadow: "0 0 0 4px rgba(212,175,55,0.25)" }}>
+          <div style={{ width: 120, height: 120, borderRadius: 14, overflow: "hidden", backgroundColor: "#B71C1C", border: "2.5px solid #D4AF37", boxShadow: "0 0 0 5px rgba(212,175,55,0.22)", flexShrink: 0 }}>
             <img src="/shivlal_logo.jpeg" alt="Shiv Lal" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           </div>
-          <div>
+          <div style={{ textAlign: "center" }}>
             <div style={S.brandName}>Shiv Lal Manpower</div>
             <div style={S.brandSub}>Operations Console</div>
           </div>
@@ -85,10 +85,10 @@ const S = {
   shell: { display: "grid", gridTemplateColumns: "250px 1fr", height: "100vh", background: "#F4F6FA" },
   sidebar: { background: "#0F1E3D", color: "#cdd6ec", display: "flex", flexDirection: "column", overflowY: "auto", transition: "transform .25s ease" },
   sidebarOpen: {},
-  brand: { padding: "20px 18px", display: "flex", gap: 11, alignItems: "center", borderBottom: "1px solid #24365E" },
+  brand: { padding: "20px 18px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, borderBottom: "1px solid #24365E" },
   logoMark: { width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg,#E8821E,#C45F0C)", display: "grid", placeItems: "center", color: "#fff", fontFamily: "Archivo", fontWeight: 800, fontSize: 17, flexShrink: 0 },
-  brandName: { fontFamily: "Archivo", fontWeight: 700, color: "#fff", fontSize: 14.5 },
-  brandSub: { fontSize: 11, color: "#9AA6BF", fontWeight: 500 },
+  brandName: { fontFamily: "Archivo", fontWeight: 700, color: "#fff", fontSize: 14.5, textAlign: "center" },
+  brandSub: { fontSize: 11, color: "#9AA6BF", fontWeight: 500, textAlign: "center" },
   navGroup: { padding: "14px 10px 4px" },
   groupLabel: { fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "#5d6c91", padding: "0 10px 8px", fontWeight: 700 },
   navItem: { display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 10, fontSize: 13.5, fontWeight: 500, color: "#c2cce6", cursor: "pointer", marginBottom: 2, textDecoration: "none" },
