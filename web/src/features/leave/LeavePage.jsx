@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSelector } from "react-redux";
 import { useGetLeavesQuery, useApproveLeaveMutation, useRejectLeaveMutation } from "./leaveApi";
 
 const LEAVE_TYPES = {
@@ -111,7 +112,10 @@ function ActionModal({ leave, action, onClose }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LeavePage() {
-  const [statusFilter, setStatusFilter] = useState("pending");
+  const user    = useSelector((s) => s.auth.user);
+  const isAdmin = user && ["admin", "hr"].includes(user.role);
+
+  const [statusFilter, setStatusFilter] = useState(isAdmin ? "pending" : "");
   const [typeFilter,   setTypeFilter]   = useState("");
   const [search,       setSearch]       = useState("");
   const [modal,        setModal]        = useState(null); // { leave, action }
@@ -169,8 +173,8 @@ export default function LeavePage() {
       {/* Header */}
       <div style={S.pageHead}>
         <div>
-          <h1 style={S.h1}>Leave Management</h1>
-          <p style={S.sub}>Review and action employee leave requests from the mobile app</p>
+          <h1 style={S.h1}>{isAdmin ? "Leave Management" : "My Leave Requests"}</h1>
+          <p style={S.sub}>{isAdmin ? "Review and action employee leave requests from the mobile app" : "View your leave history submitted via the mobile app"}</p>
         </div>
         <button style={S.refreshBtn} onClick={refetch}>↻ Refresh</button>
       </div>
@@ -209,12 +213,14 @@ export default function LeavePage() {
           <option value="el">Earned Leave</option>
           <option value="unpaid">Unpaid Leave</option>
         </select>
-        <input
-          style={S.search}
-          placeholder="Search by employee name or code…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        {isAdmin && (
+          <input
+            style={S.search}
+            placeholder="Search by employee name or code…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        )}
       </div>
 
       {/* Table */}
@@ -230,7 +236,11 @@ export default function LeavePage() {
           <table style={S.table}>
             <thead>
               <tr>
-                {["Employee", "Leave Type", "From", "To", "Days", "Reason", "Applied On", "Status", "Actions"].map((h) => (
+                {[
+                  ...(isAdmin ? ["Employee"] : []),
+                  "Leave Type", "From", "To", "Days", "Reason", "Applied On", "Status",
+                  ...(isAdmin ? ["Actions"] : []),
+                ].map((h) => (
                   <th key={h} style={S.th}>{h}</th>
                 ))}
               </tr>
@@ -242,17 +252,19 @@ export default function LeavePage() {
                 const days = calcDays(leave.from_date, leave.to_date);
                 return (
                   <tr key={leave.id} style={{ background: i % 2 === 0 ? "#fff" : "#FAFBFD" }}>
-                    <td style={S.td}>
-                      <div style={S.empCell}>
-                        <div style={S.av}>
-                          {(leave.employee_name || "?").slice(0, 2).toUpperCase()}
+                    {isAdmin && (
+                      <td style={S.td}>
+                        <div style={S.empCell}>
+                          <div style={S.av}>
+                            {(leave.employee_name || "?").slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={S.empName}>{leave.employee_name || "—"}</div>
+                            <div style={S.empCode}>{leave.emp_code}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div style={S.empName}>{leave.employee_name || "—"}</div>
-                          <div style={S.empCode}>{leave.emp_code}</div>
-                        </div>
-                      </div>
-                    </td>
+                      </td>
+                    )}
                     <td style={S.td}>
                       <span style={{ ...S.typePill, background: lt.bg, color: lt.color }}>
                         {lt.label}
@@ -278,26 +290,28 @@ export default function LeavePage() {
                         <div style={S.reviewerNote}>by {leave.reviewer_name}</div>
                       )}
                     </td>
-                    <td style={S.td}>
-                      {leave.status === "pending" ? (
-                        <div style={S.actionBtns}>
-                          <button
-                            style={S.approveBtn}
-                            onClick={() => setModal({ leave, action: "approve" })}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            style={S.rejectBtn}
-                            onClick={() => setModal({ leave, action: "reject" })}
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <span style={S.dim}>—</span>
-                      )}
-                    </td>
+                    {isAdmin && (
+                      <td style={S.td}>
+                        {leave.status === "pending" ? (
+                          <div style={S.actionBtns}>
+                            <button
+                              style={S.approveBtn}
+                              onClick={() => setModal({ leave, action: "approve" })}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              style={S.rejectBtn}
+                              onClick={() => setModal({ leave, action: "reject" })}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={S.dim}>—</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}

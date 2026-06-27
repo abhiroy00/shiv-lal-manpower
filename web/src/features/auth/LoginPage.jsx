@@ -4,7 +4,8 @@ import { useDispatch } from "react-redux";
 import { useLoginMutation } from "./authApi";
 import { setCredentials } from "./authSlice";
 
-const ALLOWED_ROLES = ["admin", "hr"];
+const ADMIN_ROLES    = ["admin", "hr"];
+const EMPLOYEE_ROLES = ["employee", "supervisor"];
 
 export default function LoginPage() {
   const [phone, setPhone] = useState("");
@@ -23,12 +24,14 @@ export default function LoginPage() {
         headers: { Authorization: `Bearer ${data.access}` },
       });
       const user = await meRes.json();
-      if (!ALLOWED_ROLES.includes(user.role)) {
-        setAccessError("Access denied. This portal is for Admin / HR only. Use the mobile app.");
-        return;
-      }
       dispatch(setCredentials({ accessToken: data.access, refreshToken: data.refresh, user }));
-      navigate("/dashboard");
+      if (ADMIN_ROLES.includes(user.role)) {
+        navigate("/dashboard");
+      } else if (EMPLOYEE_ROLES.includes(user.role)) {
+        navigate("/employee/payslip");
+      } else {
+        setAccessError("Access denied. Contact your administrator.");
+      }
     } catch {}
   };
 
@@ -51,12 +54,8 @@ export default function LoginPage() {
       </div>
 
       <div style={styles.card}>
-        <h2 style={styles.cardH2}>Sign in to your console</h2>
-        <p style={styles.sub}>Use your registered credentials to continue.</p>
-
-        <div style={styles.roleTabs}>
-          <button style={{ ...styles.roleBtn, ...styles.roleBtnOn }}>Admin / HR</button>
-        </div>
+        <h2 style={styles.cardH2}>Sign in</h2>
+        <p style={styles.sub}>Admin, HR &amp; Employee portal — use your registered credentials.</p>
 
         <form onSubmit={handleSubmit}>
           <label style={styles.label}>User ID / Mobile</label>

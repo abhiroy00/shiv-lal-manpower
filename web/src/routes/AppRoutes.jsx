@@ -14,8 +14,9 @@ import RecruitmentPage from "../features/recruitment/RecruitmentPage";
 import DeploymentPage from "../features/deployment/DeploymentPage";
 import ReportsPage from "../features/reports/ReportsPage";
 import LeavePage from "../features/leave/LeavePage";
-import EmployeePayslipPage from "../features/employee/EmployeePayslipPage";
-import EmployeeProfilePage from "../features/employee/EmployeeProfilePage";
+import EmployeePayslipPage    from "../features/employee/EmployeePayslipPage";
+import EmployeeProfilePage    from "../features/employee/EmployeeProfilePage";
+import EmployeeAttendancePage from "../features/employee/EmployeeAttendancePage";
 
 const AppRoutes = [
   { path: "/login", element: <LoginPage /> },
@@ -47,7 +48,7 @@ const AppRoutes = [
     children: [
       { index: true, element: <Navigate to="/employee/payslip" replace /> },
       { path: "payslip",    element: <EmployeePayslipPage /> },
-      { path: "attendance", element: <AttendancePage /> },
+      { path: "attendance", element: <EmployeeAttendancePage /> },
       { path: "leave",      element: <LeavePage /> },
       { path: "profile",    element: <EmployeeProfilePage /> },
     ],

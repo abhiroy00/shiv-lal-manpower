@@ -88,13 +88,20 @@ def _build_register(year, month, site_id=None, district_id=None, search=None):
 
 
 class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Attendance.objects.select_related(
-        "employee", "site", "reviewed_by"
-    ).all()
     serializer_class = AttendanceSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["employee", "date", "status", "site"]
+
+    def get_queryset(self):
+        user = self.request.user
+        base_qs = Attendance.objects.select_related("employee", "site", "reviewed_by")
+        if user.role in ("admin", "hr", "supervisor"):
+            return base_qs.all()
+        # Employees only see their own records
+        if user.employee_id:
+            return base_qs.filter(employee_id=user.employee_id)
+        return base_qs.none()
 
     def _late_threshold(self):
         from django.conf import settings

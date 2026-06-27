@@ -17,9 +17,15 @@ export default function EmployeeProfilePage() {
 
         <div style={S.infoGrid}>
           {[
-            ["Phone",       user?.phone || "—"],
-            ["Employee ID", user?.emp_code || "—"],
-            ["Role",        user?.role || "—"],
+            ["Phone",        user?.phone || "—"],
+            ["Employee ID",  user?.employee_detail?.emp_code || "—"],
+            ["Designation",  user?.employee_detail?.designation || "—"],
+            ["Site",         user?.employee_detail?.site_name || "—"],
+            ["Role",         user?.role || "—"],
+            ["UAN",          user?.employee_detail?.uan || "—"],
+            ["ESIC No.",     user?.employee_detail?.esic_no || "—"],
+            ["Bank Account", user?.employee_detail?.bank_account || "—"],
+            ["IFSC",         user?.employee_detail?.ifsc || "—"],
           ].map(([k, v]) => (
             <div key={k} style={S.infoCell}>
               <div style={S.infoKey}>{k}</div>
@@ -44,7 +50,7 @@ const S = {
   avatar:   { width: 80, height: 80, borderRadius: "50%", background: "#0F1E3D", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, fontWeight: 800, margin: "0 auto 16px" },
   name:     { fontSize: 22, fontWeight: 800, color: "#0F1E3D", marginBottom: 4 },
   role:     { fontSize: 13, color: "#6B7793", textTransform: "capitalize", marginBottom: 24, padding: "4px 14px", background: "#E3EEF9", borderRadius: 20, display: "inline-block", color: "#1565C0", fontWeight: 600 },
-  infoGrid: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 },
+  infoGrid: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20, textAlign: "left" },
   infoCell: { background: "#F8F9FC", borderRadius: 10, padding: "12px 16px", textAlign: "left" },
   infoKey:  { fontSize: 11, color: "#6B7793", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 },
   infoVal:  { fontSize: 14, fontWeight: 700, color: "#0F1E3D" },
