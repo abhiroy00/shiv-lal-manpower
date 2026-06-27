@@ -189,10 +189,12 @@ export default function PayrollPage() {
 
             <div style={S.kpiRow}>
               {[
-                { label: "Employees",   val: run.payslip_count,   fmt: (v) => v, color: "#1E3563" },
-                { label: "Total Gross", val: run.total_gross,      fmt: inr,       color: "#1E3563" },
-                { label: "Deductions",  val: run.total_deductions, fmt: inr,       color: "#D2453F" },
-                { label: "Net Payable", val: run.total_net,        fmt: inr,       color: "#15966A" },
+                { label: "Employees",      val: run.payslip_count,   fmt: (v) => v, color: "#1E3563" },
+                { label: "Basic + HRA",    val: Number(run.total_basic||0) + Number(run.total_hra||0), fmt: inr, color: "#1E3563" },
+                { label: "Bonus (8.33%)",  val: run.total_bonus,     fmt: inr,      color: "#C98A12" },
+                { label: "Deductions",     val: run.total_deductions, fmt: inr,     color: "#D2453F" },
+                { label: "TDS",            val: run.total_tds,        fmt: inr,     color: "#D2453F" },
+                { label: "Net Payable",    val: run.total_net,        fmt: inr,     color: "#15966A" },
               ].map(({ label, val, fmt, color }) => (
                 <div key={label} style={S.kpi}>
                   <div style={{ ...S.kpiVal, color }}>{fmt(val)}</div>
@@ -205,13 +207,13 @@ export default function PayrollPage() {
               <table style={S.table}>
                 <thead>
                   <tr>
-                    {["Employee","Site","Days","Gross","PF + ESI","Net Pay",""].map((h) => (
+                    {["Employee","Site","Days","Basic","HRA","Bonus(8.33%)","EPF(12%)","ESIC(0.75%)","TDS","Net Pay",""].map((h) => (
                       <th key={h} style={S.th}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {slipsLoading && <tr><td colSpan={6} style={S.tdCenter}>Loading payslips...</td></tr>}
+                  {slipsLoading && <tr><td colSpan={11} style={S.tdCenter}>Loading payslips...</td></tr>}
                   {!slipsLoading && payslips.map((p, idx) => (
                     <tr key={p.id} style={idx % 2 === 1 ? { background: "#F8F9FC" } : {}}>
                       <td style={S.td}>
@@ -227,10 +229,12 @@ export default function PayrollPage() {
                       <td style={S.td}>
                         <span style={S.daysBadge}>{p.present_days}/{p.working_days}</span>
                       </td>
-                      <td style={S.td}>{inr(p.gross_pay)}</td>
-                      <td style={{ ...S.td, color: "#D2453F" }}>
-                        {inr(Number(p.pf_employee) + Number(p.esi_employee))}
-                      </td>
+                      <td style={S.td}>{inr(p.basic)}</td>
+                      <td style={S.td}>{inr(p.hra)}</td>
+                      <td style={{ ...S.td, color: "#C98A12" }}>{inr(p.bonus)}</td>
+                      <td style={{ ...S.td, color: "#D2453F" }}>{inr(p.pf_employee)}</td>
+                      <td style={{ ...S.td, color: "#D2453F" }}>{inr(p.esi_employee)}</td>
+                      <td style={{ ...S.td, color: "#D2453F" }}>{inr(p.tds)}</td>
                       <td style={{ ...S.td, fontWeight: 700, color: "#15966A" }}>
                         {inr(p.net_pay)}
                       </td>
@@ -240,7 +244,7 @@ export default function PayrollPage() {
                     </tr>
                   ))}
                   {!slipsLoading && payslips.length === 0 && (
-                    <tr><td colSpan={7} style={S.tdCenter}>No payslips found</td></tr>
+                    <tr><td colSpan={11} style={S.tdCenter}>No payslips found</td></tr>
                   )}
                 </tbody>
               </table>

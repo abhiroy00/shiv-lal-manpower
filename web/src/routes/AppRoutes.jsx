@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 import LoginPage from "../features/auth/LoginPage";
 import DashboardLayout from "../layouts/DashboardLayout";
+import EmployeeLayout from "../layouts/EmployeeLayout";
 import ProtectedRoute from "./ProtectedRoute";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import EmployeeListPage from "../features/employees/EmployeeListPage";
@@ -13,12 +14,16 @@ import RecruitmentPage from "../features/recruitment/RecruitmentPage";
 import DeploymentPage from "../features/deployment/DeploymentPage";
 import ReportsPage from "../features/reports/ReportsPage";
 import LeavePage from "../features/leave/LeavePage";
+import EmployeePayslipPage from "../features/employee/EmployeePayslipPage";
+import EmployeeProfilePage from "../features/employee/EmployeeProfilePage";
 
 const AppRoutes = [
   { path: "/login", element: <LoginPage /> },
+
+  // Admin / HR portal
   {
     path: "/",
-    element: <ProtectedRoute><DashboardLayout /></ProtectedRoute>,
+    element: <ProtectedRoute requireAdmin><DashboardLayout /></ProtectedRoute>,
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: "dashboard", element: <DashboardPage /> },
@@ -34,6 +39,20 @@ const AppRoutes = [
       { path: "leave", element: <LeavePage /> },
     ],
   },
+
+  // Employee self-service portal
+  {
+    path: "/employee",
+    element: <ProtectedRoute><EmployeeLayout /></ProtectedRoute>,
+    children: [
+      { index: true, element: <Navigate to="/employee/payslip" replace /> },
+      { path: "payslip",    element: <EmployeePayslipPage /> },
+      { path: "attendance", element: <AttendancePage /> },
+      { path: "leave",      element: <LeavePage /> },
+      { path: "profile",    element: <EmployeeProfilePage /> },
+    ],
+  },
+
   { path: "*", element: <Navigate to="/login" replace /> },
 ];
 

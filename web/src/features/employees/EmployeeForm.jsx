@@ -7,7 +7,7 @@ import {
   useUploadEmployeeDocumentMutation,
   useDeleteEmployeeDocumentMutation,
 } from "./employeesApi";
-import { useGetSitesQuery } from "../deployment/deploymentApi";
+import { useGetSitesQuery, useGetStatesQuery, useGetDistrictsQuery } from "../deployment/deploymentApi";
 import {
   useGetSalaryStructureQuery,
   useUpsertSalaryStructureMutation,
@@ -45,6 +45,8 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
   const [tab, setTab] = useState(initialTab);
   const [form, setForm] = useState(EMPTY);
   const [customDesig, setCustomDesig] = useState("");
+  const [selectedState, setSelectedState] = useState("");
+  const [selectedDistrict, setSelectedDistrict] = useState("");
   const [errors, setErrors] = useState({});
   const [credentials, setCredentials] = useState(null);
 
@@ -60,6 +62,18 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
 
   const { data: sitesData } = useGetSitesQuery({});
   const sites = sitesData?.results || [];
+
+  const { data: statesData } = useGetStatesQuery();
+  const states = statesData?.results || statesData || [];
+
+  const { data: districtsData } = useGetDistrictsQuery(selectedState || undefined);
+  const districts = districtsData?.results || districtsData || [];
+
+  const filteredSites = selectedDistrict
+    ? sites.filter((s) => String(s.district) === String(selectedDistrict))
+    : selectedState
+      ? sites.filter((s) => String(s.district_state_id) === String(selectedState))
+      : sites;
 
   const { data: salaryData } = useGetSalaryStructureQuery(employee?.id, { skip: !isEdit || !employee?.id });
   const { data: docs = [] } = useGetEmployeeDocumentsQuery(employee?.id, { skip: !isEdit || !employee?.id });
@@ -105,8 +119,20 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
     setDocFile(null);
     setUploadErr("");
     setPendingDocs([]);
+    setSelectedState("");
+    setSelectedDistrict("");
     setTab(0);
   }, [employee]);
+
+  // Pre-populate state/district when editing (needs sites to be loaded)
+  useEffect(() => {
+    if (!isEdit || !form.site || !sites.length) return;
+    const empSite = sites.find((s) => s.id === form.site || s.id === Number(form.site));
+    if (empSite) {
+      setSelectedState(String(empSite.district_state_id || ""));
+      setSelectedDistrict(String(empSite.district || ""));
+    }
+  }, [isEdit, form.site, sites]);
 
   useEffect(() => {
     if (salaryData) {
@@ -401,11 +427,49 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
           {/* ── Tab 1: Deployment ── */}
           {tab === 1 && (
             <div style={S.section}>
-              <Field label="Assigned Site">
-                <select style={S.input} value={form.site} onChange={set("site")}>
+              <Field label="State">
+                <select
+                  style={S.input}
+                  value={selectedState}
+                  onChange={(e) => {
+                    setSelectedState(e.target.value);
+                    setSelectedDistrict("");
+                    setForm((f) => ({ ...f, site: "" }));
+                  }}
+                >
+                  <option value="">— All States —</option>
+                  {states.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="District">
+                <select
+                  style={S.input}
+                  value={selectedDistrict}
+                  onChange={(e) => {
+                    setSelectedDistrict(e.target.value);
+                    setForm((f) => ({ ...f, site: "" }));
+                  }}
+                  disabled={!selectedState}
+                >
+                  <option value="">— All Districts —</option>
+                  {districts.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Assigned Site / Office">
+                <select
+                  style={S.input}
+                  value={form.site}
+                  onChange={set("site")}
+                >
                   <option value="">— Not assigned —</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.district_name})</option>
+                  {filteredSites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.district_name}, {s.state_name})
+                    </option>
                   ))}
                 </select>
               </Field>

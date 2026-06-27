@@ -22,6 +22,10 @@ export const payrollApi = baseApi.injectEndpoints({
       query: (params) => ({ url: "/payslips/", params: { page_size: 500, ...params } }),
       providesTags: ["Payslip"],
     }),
+    getMyPayslips: build.query({
+      query: () => "/my-payslips/",
+      providesTags: ["Payslip"],
+    }),
     // Salary structures
     getSalaryStructure: build.query({
       query: (employeeId) => ({ url: "/salary-structures/", params: { employee: employeeId } }),
@@ -48,6 +52,7 @@ export const {
   useApprovePayrollRunMutation,
   useMarkPaidPayrollRunMutation,
   useGetPayslipsQuery,
+  useGetMyPayslipsQuery,
   useGetSalaryStructureQuery,
   useUpsertSalaryStructureMutation,
 } = payrollApi;

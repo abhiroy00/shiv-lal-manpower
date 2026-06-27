@@ -4,9 +4,12 @@ from apps.attendance.models import Attendance
 from apps.employees.models import Employee
 from .models import SalaryStructure, PayrollRun, Payslip
 
-PF_RATE       = Decimal("0.12")
-ESI_THRESHOLD = Decimal("21000")
-ESI_RATE      = Decimal("0.0075")
+PF_RATE        = Decimal("0.12")
+ESI_THRESHOLD  = Decimal("21000")
+ESI_RATE       = Decimal("0.0075")
+BONUS_RATE     = Decimal("0.0833")   # 8.33% statutory bonus
+PF_EMPLOYER    = Decimal("0.12")     # employer PF contribution
+ESI_EMPLOYER   = Decimal("0.0325")   # employer ESI contribution
 
 
 def _working_days(month, year):
@@ -43,11 +46,16 @@ def run_payroll(month, year, user):
         ).count()
 
         ratio = Decimal(present) / Decimal(working_days) if working_days else Decimal(0)
-        gross = struct.gross() * ratio
+        basic_pay = (struct.basic * ratio).quantize(Decimal("0.01"))
+        hra_pay   = (struct.hra   * ratio).quantize(Decimal("0.01"))
+        da_pay    = (struct.da    * ratio).quantize(Decimal("0.01"))
+        other_pay = (struct.other_allowances * ratio).quantize(Decimal("0.01"))
+        bonus     = (basic_pay * BONUS_RATE).quantize(Decimal("0.01"))
+        gross     = basic_pay + hra_pay + da_pay + other_pay
 
-        pf  = (gross * PF_RATE).quantize(Decimal("0.01"))
+        pf  = (basic_pay * PF_RATE).quantize(Decimal("0.01"))
         esi = (gross * ESI_RATE).quantize(Decimal("0.01")) if gross <= ESI_THRESHOLD else Decimal("0.00")
-        net = (gross - pf - esi).quantize(Decimal("0.01"))
+        net = (gross + bonus - pf - esi).quantize(Decimal("0.01"))
 
         _, was_created = Payslip.objects.update_or_create(
             payroll_run=run,
@@ -55,12 +63,14 @@ def run_payroll(month, year, user):
             defaults={
                 "present_days":     present,
                 "working_days":     working_days,
-                "basic":            (struct.basic * ratio).quantize(Decimal("0.01")),
-                "hra":              (struct.hra   * ratio).quantize(Decimal("0.01")),
-                "da":               (struct.da    * ratio).quantize(Decimal("0.01")),
-                "other_allowances": (struct.other_allowances * ratio).quantize(Decimal("0.01")),
+                "basic":            basic_pay,
+                "hra":              hra_pay,
+                "da":               da_pay,
+                "other_allowances": other_pay,
+                "bonus":            bonus,
                 "pf_employee":      pf,
                 "esi_employee":     esi,
+                "tds":              Decimal("0.00"),
                 "net_pay":          net,
             },
         )

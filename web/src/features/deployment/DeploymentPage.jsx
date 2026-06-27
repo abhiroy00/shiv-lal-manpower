@@ -38,7 +38,7 @@ function InlineCreate({ placeholder, onCreate, busy }) {
 }
 
 // ── Site form modal (create / edit) ──────────────────────────
-const BLANK_SITE = { name: "", address: "", lat: "", lng: "", geofence_radius: 200, sanctioned_strength: 0, is_active: true };
+const BLANK_SITE = { name: "", office_name: "", address: "", lat: "", lng: "", geofence_radius: 200, sanctioned_strength: 0, is_active: true };
 
 function SiteFormModal({ site, onClose }) {
   const isEdit = !!site;
@@ -54,7 +54,7 @@ function SiteFormModal({ site, onClose }) {
   // Step 3 — Site fields
   const [form, setForm] = useState(
     isEdit
-      ? { name: site.name, address: site.address || "",
+      ? { name: site.name, office_name: site.office_name || "", address: site.address || "",
           lat: site.lat ?? "", lng: site.lng ?? "",
           geofence_radius: site.geofence_radius,
           sanctioned_strength: site.sanctioned_strength,
@@ -186,6 +186,11 @@ function SiteFormModal({ site, onClose }) {
           <input style={F.input} value={form.name} disabled={!districtId}
             onChange={(e) => set("name", e.target.value)}
             placeholder="e.g. Main Gate Security Post" />
+
+          <label style={F.label}>Office Name</label>
+          <input style={F.input} value={form.office_name} disabled={!districtId}
+            onChange={(e) => set("office_name", e.target.value)}
+            placeholder="e.g. District Collectorate Office" />
 
           <label style={F.label}>Address</label>
           <textarea style={{ ...F.input, height: 52, resize: "vertical" }} value={form.address}

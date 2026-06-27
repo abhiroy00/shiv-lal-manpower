@@ -13,10 +13,11 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "in.shivlal.manpower",
+      "bundleIdentifier": "com.shivlal.manpower",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Required for GPS attendance check-in.",
-        "NSCameraUsageDescription": "Required for selfie attendance verification."
+        "NSCameraUsageDescription": "Required for selfie attendance verification.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -25,12 +26,16 @@
         "backgroundColor": "#0F1E3D"
       },
       "package": "in.shivlal.manpower",
+      "versionCode": 2,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "CAMERA"
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
-      "usesCleartextTraffic": true,
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyCJ-pctI9aBhLlueVMsYyQtmbF70TnAEVg"
@@ -48,7 +53,20 @@
           "locationAlwaysAndWhenInUsePermission": "Required for GPS attendance check-in."
         }
       ],
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "1660f159-7d47-49c0-8fc4-ccf46e2d311e"
+      }
+    }
   }
 }

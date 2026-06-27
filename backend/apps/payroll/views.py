@@ -206,35 +206,51 @@ class MyPayslipsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        try:
-            emp = request.user.employee
-        except Exception:
+        emp = request.user.employee
+        if emp is None:
             return Response({"detail": "No employee linked."}, status=400)
+        # Prefetch site to avoid extra query on emp.site.name
+        from apps.employees.models import Employee as EmpModel
+        emp = EmpModel.objects.select_related("site").get(pk=emp.pk)
         slips = (
             Payslip.objects
             .filter(employee=emp)
             .select_related("payroll_run")
             .order_by("-payroll_run__year", "-payroll_run__month")
         )
+        MONTH_NAMES = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
         data = []
         for s in slips:
+            m = s.payroll_run.month
+            y = s.payroll_run.year
             data.append({
-                "id":            s.id,
-                "month":         s.payroll_run.month,
-                "year":          s.payroll_run.year,
-                "run_status":    s.payroll_run.run_status,
-                "present_days":  s.present_days,
-                "working_days":  s.working_days,
-                "basic":         str(s.basic),
-                "hra":           str(s.hra),
-                "da":            str(s.da),
+                "id":               s.id,
+                "month":            m,
+                "year":             y,
+                "run_month":        m,
+                "run_year":         y,
+                "month_label":      f"{MONTH_NAMES[m]} {y}" if 1 <= m <= 12 else f"{m}/{y}",
+                "run_status":       s.payroll_run.run_status,
+                "emp_code":         emp.emp_code,
+                "employee_name":    emp.full_name,
+                "designation":      emp.designation,
+                "site_name":        emp.site.name if emp.site else "",
+                "bank_account":     emp.bank_account or "",
+                "ifsc":             emp.ifsc or "",
+                "present_days":     s.present_days,
+                "working_days":     s.working_days,
+                "basic":            str(s.basic),
+                "hra":              str(s.hra),
+                "da":               str(s.da),
                 "other_allowances": str(s.other_allowances),
-                "gross":         str(s.basic + s.hra + s.da + s.other_allowances),
-                "pf_employee":   str(s.pf_employee),
-                "esi_employee":  str(s.esi_employee),
+                "gross":            str(s.basic + s.hra + s.da + s.other_allowances),
+                "bonus":            str(s.bonus),
+                "pf_employee":      str(s.pf_employee),
+                "esi_employee":     str(s.esi_employee),
+                "tds":              str(s.tds),
                 "other_deductions": str(s.other_deductions),
-                "net_pay":       str(s.net_pay),
-                "pdf_url":       request.build_absolute_uri(f"/api/payslips/{s.id}/pdf/"),
+                "net_pay":          str(s.net_pay),
+                "pdf_url":          request.build_absolute_uri(f"/api/payslips/{s.id}/pdf/"),
             })
         response = Response(data)
         response["Cache-Control"] = "no-cache, no-store, must-revalidate"

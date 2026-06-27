@@ -13,8 +13,12 @@ const SC = {
 
 function PayslipDetail({ slip, onClose }) {
   const accessToken = useSelector((s) => s.auth.accessToken);
-  const gross = Number(slip.basic) + Number(slip.hra) + Number(slip.da) + Number(slip.other_allowances);
-  const totalDed = Number(slip.pf_employee) + Number(slip.esi_employee) + Number(slip.other_deductions);
+  const bonus    = Number(slip.bonus || 0);
+  const tds      = Number(slip.tds   || 0);
+  const gross    = Number(slip.basic) + Number(slip.hra) + Number(slip.da) + Number(slip.other_allowances);
+  const totalDed = Number(slip.pf_employee) + Number(slip.esi_employee) + tds + Number(slip.other_deductions);
+  const pfEmployer  = Number(slip.basic) * 0.12;
+  const esiEmployer = gross <= 21000 ? gross * 0.0325 : 0;
   // Use month_label from serializer (e.g. "June 2026") — avoids stale runLabel
   const label = slip.month_label || `${MONTHS[slip.run_month] || ""} ${slip.run_year || ""}`;
 
@@ -72,10 +76,11 @@ function PayslipDetail({ slip, onClose }) {
           <div style={D.secTitle}>EARNINGS</div>
           <div style={D.table}>
             {[
-              ["Basic Salary",          slip.basic],
+              ["Basic Salary",         slip.basic],
               ["House Rent Allowance",  slip.hra],
               ["Dearness Allowance",    slip.da],
               ["Other Allowances",      slip.other_allowances],
+              ["Bonus (8.33%)",         bonus],
             ].filter(([, v]) => Number(v) > 0).map(([k, v]) => (
               <div key={k} style={D.row}>
                 <span style={D.rowK}>{k}</span>
@@ -84,7 +89,7 @@ function PayslipDetail({ slip, onClose }) {
             ))}
             <div style={{ ...D.row, ...D.totalRow }}>
               <span style={D.totalK}>Gross Earnings</span>
-              <span style={{ ...D.totalV, color: "#15966A" }}>{inr(gross)}</span>
+              <span style={{ ...D.totalV, color: "#15966A" }}>{inr(gross + bonus)}</span>
             </div>
           </div>
         </div>
@@ -94,9 +99,10 @@ function PayslipDetail({ slip, onClose }) {
           <div style={D.secTitle}>DEDUCTIONS</div>
           <div style={D.table}>
             {[
-              ["PF (Employee 12%)",    slip.pf_employee],
-              ["ESI (Employee 0.75%)", slip.esi_employee],
-              ["Other Deductions",     slip.other_deductions],
+              ["EPF (Employee 12%)",    slip.pf_employee],
+              ["ESIC (Employee 0.75%)", slip.esi_employee],
+              ["TDS",                   tds],
+              ["Other Deductions",      slip.other_deductions],
             ].filter(([, v]) => Number(v) > 0).map(([k, v]) => (
               <div key={k} style={D.row}>
                 <span style={D.rowK}>{k}</span>
@@ -106,6 +112,37 @@ function PayslipDetail({ slip, onClose }) {
             <div style={{ ...D.row, ...D.totalRow }}>
               <span style={D.totalK}>Total Deductions</span>
               <span style={{ ...D.totalV, color: "#D2453F" }}>- {inr(totalDed)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Employer Contributions */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={D.secTitle}>EMPLOYER CONTRIBUTIONS</div>
+        <div style={D.grid2}>
+          <div style={D.table}>
+            {[
+              ["EPF (Employer 12%)",    pfEmployer],
+              ["ESIC (Employer 3.25%)", esiEmployer],
+              ["Bonus / Other (8.33%)", bonus],
+            ].filter(([, v]) => v > 0).map(([k, v]) => (
+              <div key={k} style={D.row}>
+                <span style={D.rowK}>{k}</span>
+                <span style={{ ...D.rowV, color: "#1565C0" }}>{inr(v)}</span>
+              </div>
+            ))}
+            <div style={{ ...D.row, ...D.totalRow }}>
+              <span style={D.totalK}>Total Employer Cost</span>
+              <span style={{ ...D.totalV, color: "#1565C0" }}>{inr(pfEmployer + esiEmployer + bonus)}</span>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 10px" }}>
+            <div style={{ fontSize: 12, color: "#6B7793", lineHeight: "1.8" }}>
+              <b>EPF:</b> 12% of Basic (both employee &amp; employer)<br/>
+              <b>ESIC:</b> 0.75% employee · 3.25% employer<br/>
+              <b>Bonus:</b> 8.33% of Basic (statutory)<br/>
+              <span style={{ color: "#9AA6BF", fontSize: 11 }}>Employer contributions are not deducted from your salary.</span>
             </div>
           </div>
         </div>

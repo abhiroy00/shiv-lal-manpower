@@ -28,12 +28,33 @@ class PayrollRunSerializer(serializers.ModelSerializer):
     def get_payslip_count(self, obj):
         return obj.payslips.count()
 
+    total_basic   = serializers.SerializerMethodField()
+    total_hra     = serializers.SerializerMethodField()
+    total_bonus   = serializers.SerializerMethodField()
+    total_tds     = serializers.SerializerMethodField()
+
     def get_total_gross(self, obj):
         from django.db.models import Sum
         agg = obj.payslips.aggregate(
             s=Sum("basic") + Sum("hra") + Sum("da") + Sum("other_allowances")
         )
         return float(agg["s"] or 0)
+
+    def get_total_basic(self, obj):
+        from django.db.models import Sum
+        return float(obj.payslips.aggregate(s=Sum("basic"))["s"] or 0)
+
+    def get_total_hra(self, obj):
+        from django.db.models import Sum
+        return float(obj.payslips.aggregate(s=Sum("hra"))["s"] or 0)
+
+    def get_total_bonus(self, obj):
+        from django.db.models import Sum
+        return float(obj.payslips.aggregate(s=Sum("bonus"))["s"] or 0)
+
+    def get_total_tds(self, obj):
+        from django.db.models import Sum
+        return float(obj.payslips.aggregate(s=Sum("tds"))["s"] or 0)
 
     def get_total_net(self, obj):
         from django.db.models import Sum
@@ -43,7 +64,7 @@ class PayrollRunSerializer(serializers.ModelSerializer):
     def get_total_deductions(self, obj):
         from django.db.models import Sum
         agg = obj.payslips.aggregate(
-            s=Sum("pf_employee") + Sum("esi_employee") + Sum("other_deductions")
+            s=Sum("pf_employee") + Sum("esi_employee") + Sum("tds") + Sum("other_deductions")
         )
         return float(agg["s"] or 0)
 
@@ -70,8 +91,22 @@ class PayslipSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("created_at", "updated_at")
 
+    pf_employer  = serializers.SerializerMethodField()
+    esi_employer = serializers.SerializerMethodField()
+
     def get_gross_pay(self, obj):
         return float(obj.basic + obj.hra + obj.da + obj.other_allowances)
+
+    def get_pf_employer(self, obj):
+        from decimal import Decimal
+        return float((obj.basic * Decimal("0.12")).quantize(Decimal("0.01")))
+
+    def get_esi_employer(self, obj):
+        from decimal import Decimal
+        gross = obj.basic + obj.hra + obj.da + obj.other_allowances
+        if gross <= Decimal("21000"):
+            return float((gross * Decimal("0.0325")).quantize(Decimal("0.01")))
+        return 0.0
 
     def get_month_label(self, obj):
         import calendar

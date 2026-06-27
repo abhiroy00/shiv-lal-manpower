@@ -49,6 +49,10 @@ function calcDays(from, to) {
 
 function isoDate(dd, mm, yyyy) {
   if (!dd || !mm || !yyyy || yyyy.length < 4) return "";
+  const d = parseInt(dd, 10), m = parseInt(mm, 10), y = parseInt(yyyy, 10);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return "";
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return "";
   return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
 }
 
@@ -69,6 +73,7 @@ function DateInput({ label, value, onChange }) {
   return (
     <View style={DI.wrap}>
       <Text style={DI.label}>{label}</Text>
+      <Text style={DI.hint}>Format: DD / MM / YYYY</Text>
       <View style={DI.row}>
         <TextInput
           style={DI.seg}
@@ -158,7 +163,11 @@ function ApplyForm({ balance, onSuccess }) {
 
   const handleSubmit = async () => {
     if (!fromDate || !toDate || !reason.trim()) {
-      Alert.alert("Missing Fields", "Please fill all fields before submitting.");
+      Alert.alert("Missing Fields", "Please fill all fields before submitting.\n\nDate format: DD / MM / YYYY");
+      return;
+    }
+    if (!fromDate || !toDate) {
+      Alert.alert("Invalid Date", "Please enter a valid date in DD / MM / YYYY format.");
       return;
     }
     if (fromDate > toDate) {
@@ -471,7 +480,8 @@ const F = StyleSheet.create({
 
 const DI = StyleSheet.create({
   wrap:    { marginBottom: 12 },
-  label:   { fontSize: 12, fontWeight: "700", color: colors.muted, marginBottom: 6, letterSpacing: 0.4 },
+  label:   { fontSize: 12, fontWeight: "700", color: colors.muted, marginBottom: 4, letterSpacing: 0.4 },
+  hint:    { fontSize: 10, color: colors.muted, marginBottom: 6 },
   row:     { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: colors.line, borderRadius: 12, backgroundColor: "#FAFBFF", paddingHorizontal: 8 },
   seg:     { flex: 2, paddingVertical: 14, paddingHorizontal: 2, fontSize: 17, color: colors.ink, textAlign: "center", fontWeight: "600" },
   segYear: { flex: 3 },

@@ -20,6 +20,9 @@ export default function EmployeeListPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [importResult, setImportResult]       = useState(null);
   const importFileRef = useRef(null);
+  const [selectedIds, setSelectedIds]   = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const { data, isLoading } = useGetEmployeesQuery({
     search, status: status || undefined, page, page_size: PAGE_SIZE,
@@ -75,8 +78,27 @@ export default function EmployeeListPage() {
     }
   };
 
-  const handleSearch = (e) => { setSearch(e.target.value); setPage(1); };
-  const handleStatus = (e) => { setStatus(e.target.value); setPage(1); };
+  const handleSearch = (e) => { setSearch(e.target.value); setPage(1); setSelectedIds([]); };
+  const handleStatus = (e) => { setStatus(e.target.value); setPage(1); setSelectedIds([]); };
+
+  const allSelected = employees.length > 0 && employees.every((e) => selectedIds.includes(e.id));
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? [] : employees.map((e) => e.id));
+  };
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      await Promise.all(selectedIds.map((id) => deleteEmployee(id).unwrap().catch(() => {})));
+      setSelectedIds([]);
+      setConfirmBulkDelete(false);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   const handleImportFile = async (e) => {
     const file = e.target.files[0];
@@ -145,10 +167,23 @@ export default function EmployeeListPage() {
           </select>
         </div>
 
+        {selectedIds.length > 0 && (
+          <div style={S.bulkBar}>
+            <span style={S.bulkInfo}>{selectedIds.length} employee{selectedIds.length > 1 ? "s" : ""} selected</span>
+            <button style={S.bulkDeleteBtn} onClick={() => setConfirmBulkDelete(true)}>
+              🗑 Delete Selected
+            </button>
+            <button style={S.bulkClearBtn} onClick={() => setSelectedIds([])}>Clear</button>
+          </div>
+        )}
+
         <div style={S.card}>
           <table style={S.table}>
             <thead>
               <tr>
+                <th style={{ ...S.th, width: 40 }}>
+                  <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+                </th>
                 {["Employee", "Designation", "Site", "Phone", "Joined", "Status", "Documents", ""].map((h) => (
                   <th key={h} style={S.th}>{h}</th>
                 ))}
@@ -156,12 +191,15 @@ export default function EmployeeListPage() {
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={8} style={S.empty}>Loading…</td></tr>
+                <tr><td colSpan={9} style={S.empty}>Loading…</td></tr>
               )}
               {employees.map((emp) => {
                 const sc = STATUS_COLORS[emp.status] || STATUS_COLORS.inactive;
                 return (
                   <tr key={emp.id} style={S.tr} onClick={() => openEdit(emp)}>
+                    <td style={S.td} onClick={(e) => { e.stopPropagation(); toggleSelect(emp.id); }}>
+                      <input type="checkbox" checked={selectedIds.includes(emp.id)} onChange={() => toggleSelect(emp.id)} />
+                    </td>
                     <td style={S.td}>
                       <div style={S.empCell}>
                         <div style={S.av}>{emp.full_name.slice(0, 2).toUpperCase()}</div>
@@ -225,7 +263,7 @@ export default function EmployeeListPage() {
                 );
               })}
               {!isLoading && employees.length === 0 && (
-                <tr><td colSpan={8} style={S.empty}>No employees found</td></tr>
+                <tr><td colSpan={9} style={S.empty}>No employees found</td></tr>
               )}
             </tbody>
           </table>
@@ -266,6 +304,28 @@ export default function EmployeeListPage() {
           onClose={closeForm}
           initialTab={formTab}
         />
+      )}
+
+      {/* Bulk delete confirm modal */}
+      {confirmBulkDelete && (
+        <div style={S.overlay} onClick={() => setConfirmBulkDelete(false)}>
+          <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={S.modalTitle}>Delete {selectedIds.length} Employees?</div>
+            <div style={{ fontSize: 13.5, color: "#6B7793", marginBottom: 20 }}>
+              This action cannot be undone. All data for the selected employees will be permanently deleted.
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button style={S.btn} onClick={() => setConfirmBulkDelete(false)}>Cancel</button>
+              <button
+                style={{ ...S.btnSolid, background: "#D2453F" }}
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+              >
+                {bulkDeleting ? "Deleting…" : `Delete ${selectedIds.length} Employees`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Import result modal */}
@@ -353,6 +413,10 @@ const S = {
   resultBadge: { display: "inline-flex", alignItems: "center", padding: "8px 14px", borderRadius: 9, fontWeight: 700, fontSize: 14 },
   errorList:   { background: "#FFF8F7", border: "1px solid #F5C6C4", borderRadius: 9, padding: "10px 14px", maxHeight: 240, overflowY: "auto" },
   errorRow:    { fontSize: 12.5, color: "#8B2020", padding: "4px 0", borderBottom: "1px solid #FADBD8" },
+  bulkBar: { display: "flex", alignItems: "center", gap: 10, background: "#1E3563", borderRadius: 10, padding: "10px 16px", marginBottom: 10 },
+  bulkInfo: { fontSize: 13, fontWeight: 600, color: "#fff", flex: 1 },
+  bulkDeleteBtn: { padding: "7px 14px", borderRadius: 8, border: 0, background: "#D2453F", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer" },
+  bulkClearBtn:  { padding: "7px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,.3)", background: "transparent", color: "#fff", fontSize: 12.5, fontWeight: 600, cursor: "pointer" },
   pagination: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", gap: 8 },
   pgInfo: { fontSize: 12.5, color: "#6B7793" },
   pgButtons: { display: "flex", gap: 4 },

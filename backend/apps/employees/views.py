@@ -116,7 +116,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
         HEADERS = [
             ("Emp Code", 14), ("Full Name", 22), ("Designation", 20), ("Phone", 14),
-            ("Site", 24), ("Date Joined", 14), ("Status", 12),
+            ("State", 18), ("District", 18), ("Site", 24), ("Date Joined", 14), ("Status", 12),
             ("UAN", 16), ("ESIC No", 16), ("Aadhar", 15), ("PAN", 13),
             ("Bank Account", 20), ("IFSC", 13),
         ]
@@ -127,8 +127,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             ws.column_dimensions[get_column_letter(col)].width = width
 
         # Sample row
-        sample = ["", "John Doe", "Security Guard", "9876543210", "DEOGHAR COLLEGE DEOGHAR",
-                  "2024-01-15", "active", "", "", "", "", "", ""]
+        sample = ["", "John Doe", "Security Guard", "9876543210", "Jharkhand", "Deoghar",
+                  "DEOGHAR COLLEGE DEOGHAR", "2024-01-15", "active", "", "", "", "", "", ""]
         for col, val in enumerate(sample, 1):
             c = ws.cell(2, col, val); c.border = bdr
 
@@ -143,7 +143,9 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             ["Full Name", "REQUIRED"],
             ["Designation", "REQUIRED"],
             ["Phone", "REQUIRED — 10-digit, must be unique"],
-            ["Site", "Optional — must match exact site name in the system"],
+            ["State", "Optional — State name (e.g. Jharkhand). Used to narrow site search."],
+            ["District", "Optional — District name (e.g. Deoghar). Used to narrow site search."],
+            ["Site", "Optional — Site/Office name. Best matched with State + District."],
             ["Date Joined", "REQUIRED — format: YYYY-MM-DD (e.g. 2024-01-15)"],
             ["Status", "Optional — active / on_leave / inactive (default: active)"],
             ["UAN / ESIC No / Aadhar / PAN / Bank Account / IFSC", "All optional"],
@@ -256,10 +258,30 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 max_num += 1
                 emp_code = str(max_num).zfill(4)
 
-            site_name = cell_str(row_idx, "Site")
+            site_name    = cell_str(row_idx, "Site")
+            state_name   = cell_str(row_idx, "State")
+            district_name = cell_str(row_idx, "District")
             site = None
             if site_name:
-                site = Site.objects.filter(name__iexact=site_name).first()
+                qs_site = Site.objects.select_related("district__state")
+                if state_name and district_name:
+                    site = qs_site.filter(
+                        name__iexact=site_name,
+                        district__name__iexact=district_name,
+                        district__state__name__iexact=state_name,
+                    ).first()
+                elif district_name:
+                    site = qs_site.filter(
+                        name__iexact=site_name,
+                        district__name__iexact=district_name,
+                    ).first()
+                elif state_name:
+                    site = qs_site.filter(
+                        name__iexact=site_name,
+                        district__state__name__iexact=state_name,
+                    ).first()
+                if site is None:
+                    site = qs_site.filter(name__iexact=site_name).first()
 
             status_val = STATUS_MAP.get(cell_str(row_idx, "Status"), "active")
 
@@ -324,9 +346,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             ("Full Name",    22),
             ("Designation",  20),
             ("Phone",        14),
-            ("Site",         24),
-            ("District",     18),
             ("State",        14),
+            ("District",     18),
+            ("Site",         24),
+            ("Office Name",  24),
             ("Date Joined",  14),
             ("Status",       12),
             ("UAN",          16),
@@ -359,9 +382,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 emp.full_name,
                 emp.designation,
                 emp.phone,
-                emp.site.name           if emp.site else "",
-                emp.site.district.name  if emp.site and emp.site.district else "",
                 emp.site.district.state.name if emp.site and emp.site.district and emp.site.district.state else "",
+                emp.site.district.name  if emp.site and emp.site.district else "",
+                emp.site.name           if emp.site else "",
+                emp.site.office_name    if emp.site else "",
                 emp.date_joined,
                 STATUS_MAP.get(emp.status, emp.status),
                 emp.uan,

@@ -23,6 +23,7 @@ class District(TimeStampedModel):
 class Site(TimeStampedModel):
     district = models.ForeignKey(District, on_delete=models.CASCADE, related_name="sites")
     name = models.CharField(max_length=120)
+    office_name = models.CharField(max_length=120, blank=True, help_text="Administrative office name")
     address = models.TextField(blank=True)
     lat = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     lng = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
