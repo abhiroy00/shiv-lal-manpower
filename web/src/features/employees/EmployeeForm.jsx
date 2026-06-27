@@ -209,9 +209,12 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
     } catch { /* ignore */ }
   };
 
+  const MAX_DOC_SIZE = 20 * 1024 * 1024; // 20 MB
+
   // Edit mode: upload immediately
   const handleUploadDoc = async () => {
     if (!docFile) { setUploadErr("Please select a file."); return; }
+    if (docFile.size > MAX_DOC_SIZE) { setUploadErr("File too large. Maximum allowed size is 20 MB."); return; }
     setUploadErr("");
     setUploading(true);
     try {
@@ -232,6 +235,7 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
   // Create mode: add to queue
   const handleQueueDoc = () => {
     if (!docFile) { setUploadErr("Please select a file."); return; }
+    if (docFile.size > MAX_DOC_SIZE) { setUploadErr("File too large. Maximum allowed size is 20 MB."); return; }
     setUploadErr("");
     setPendingDocs((p) => [...p, { docType, file: docFile }]);
     setDocFile(null);
@@ -526,13 +530,21 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
                     <option value="other">Other / Combined PDF</option>
                   </select>
                 </Field>
-                <Field label="File (PDF or Image)">
+                <Field label="File (PDF or Image · max 20 MB)">
                   <input
                     id="doc-file-input"
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png"
                     style={S.fileInput}
-                    onChange={(e) => { setDocFile(e.target.files[0] || null); setUploadErr(""); }}
+                    onChange={(e) => {
+                      const f = e.target.files[0] || null;
+                      setDocFile(f);
+                      if (f && f.size > 20 * 1024 * 1024) {
+                        setUploadErr(`File too large (${(f.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is 20 MB.`);
+                      } else {
+                        setUploadErr("");
+                      }
+                    }}
                   />
                 </Field>
                 {uploadErr && <div style={S.errMsg}>{uploadErr}</div>}
