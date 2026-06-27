@@ -8,7 +8,6 @@ import { ShivLalLogoFull } from "../../components/ShivLalLogo";
 export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("Admin / HR");
   const [login, { isLoading, error }] = useLoginMutation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -47,15 +46,7 @@ export default function LoginPage() {
         <p style={styles.sub}>Use your registered credentials to continue.</p>
 
         <div style={styles.roleTabs}>
-          {["Admin / HR", "Field Employee"].map((r) => (
-            <button
-              key={r}
-              style={{ ...styles.roleBtn, ...(role === r ? styles.roleBtnOn : {}) }}
-              onClick={() => setRole(r)}
-            >
-              {r}
-            </button>
-          ))}
+          <button style={{ ...styles.roleBtn, ...styles.roleBtnOn }}>Admin / HR</button>
         </div>
 
         <form onSubmit={handleSubmit}>
