@@ -10,19 +10,30 @@ export default function ShivLalLogo({ size = 48 }) {
   );
 }
 
-export function ShivLalLogoFull({ width = 220 }) {
+export function ShivLalLogoFull({ width = 200 }) {
   return (
-    <svg viewBox="0 0 400 480" width={width} height={width * 1.2} xmlns="http://www.w3.org/2000/svg">
-      <rect width="400" height="480" fill="#B71C1C" />
-      <polygon points="200,18 385,240 200,462 15,240" fill="none" stroke="#D4AF37" strokeWidth="5" />
-      <path d="M200,120 L274,148 L274,252 Q274,312 200,338 Q126,312 126,252 L126,148 Z" fill="none" stroke="#D4AF37" strokeWidth="5" />
-      <polygon points="200,152 212,188 250,188 220,210 232,246 200,224 168,246 180,210 150,188 188,188" fill="#D4AF37" />
-      <line x1="200" y1="246" x2="200" y2="338" stroke="#D4AF37" strokeWidth="5" />
-      <text textAnchor="middle" fontFamily="'Arial Black',Impact,sans-serif" fontSize="50" fontWeight="900" letterSpacing="1">
-        <tspan x="200" y="408" fill="#1A0500">M/S </tspan>
-        <tspan fill="#D4AF37">SHIV </tspan>
-        <tspan fill="#1A0500">LAL</tspan>
-      </text>
+    <svg viewBox="0 0 400 400" width={width} height={width} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <clipPath id="slm-circle">
+          <circle cx="200" cy="200" r="197" />
+        </clipPath>
+      </defs>
+      {/* Circle background */}
+      <circle cx="200" cy="200" r="200" fill="#B71C1C" />
+      {/* Everything clipped to the circle */}
+      <g clipPath="url(#slm-circle)">
+        <polygon points="200,22 378,200 200,378 22,200" fill="none" stroke="#D4AF37" strokeWidth="4.5" />
+        <path d="M200,92 L264,116 L264,208 Q264,262 200,286 Q136,262 136,208 L136,116 Z" fill="none" stroke="#D4AF37" strokeWidth="4.5" />
+        <polygon points="200,122 212,157 248,157 220,178 230,213 200,192 170,213 180,178 152,157 188,157" fill="#D4AF37" />
+        <line x1="200" y1="213" x2="200" y2="286" stroke="#D4AF37" strokeWidth="4.5" />
+        <text textAnchor="middle" fontFamily="'Arial Black',Impact,sans-serif" fontSize="40" fontWeight="900" letterSpacing="1">
+          <tspan x="200" y="352" fill="#1A0500">M/S </tspan>
+          <tspan fill="#D4AF37">SHIV </tspan>
+          <tspan fill="#1A0500">LAL</tspan>
+        </text>
+      </g>
+      {/* Gold border ring */}
+      <circle cx="200" cy="200" r="196" fill="none" stroke="#D4AF37" strokeWidth="4" />
     </svg>
   );
 }
