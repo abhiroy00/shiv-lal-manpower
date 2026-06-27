@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useSelector } from "react-redux";
-import { useGetEmployeesQuery, useDeleteEmployeeMutation } from "./employeesApi";
+import { useGetEmployeesQuery, useDeleteEmployeeMutation, useImportEmployeesMutation } from "./employeesApi";
 import EmployeeForm from "./EmployeeForm";
 
 const STATUS_COLORS = {
@@ -18,6 +18,8 @@ export default function EmployeeListPage() {
   const [formEmployee, setFormEmployee] = useState(null); // null=closed, {}=add, obj=edit
   const [formTab, setFormTab]           = useState(0);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [importResult, setImportResult]       = useState(null);
+  const importFileRef = useRef(null);
 
   const { data, isLoading } = useGetEmployeesQuery({
     search, status: status || undefined, page, page_size: PAGE_SIZE,
@@ -27,6 +29,7 @@ export default function EmployeeListPage() {
   const totalPages = data?.count ? Math.ceil(data.count / PAGE_SIZE) : 1;
 
   const [deleteEmployee, { isLoading: deleting }] = useDeleteEmployeeMutation();
+  const [importEmployees, { isLoading: importing }] = useImportEmployeesMutation();
 
   const accessToken = useSelector((s) => s.auth.accessToken);
   const [exporting, setExporting] = useState(false);
@@ -75,6 +78,32 @@ export default function EmployeeListPage() {
   const handleSearch = (e) => { setSearch(e.target.value); setPage(1); };
   const handleStatus = (e) => { setStatus(e.target.value); setPage(1); };
 
+  const handleImportFile = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";   // reset so same file can be re-selected
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await importEmployees(fd).unwrap();
+      setImportResult(res);
+    } catch (err) {
+      setImportResult({ error: err?.data?.detail || "Import failed. Please check the file format." });
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    const res = await fetch("/api/employees/import-template/", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) { alert("Failed to download template."); return; }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "employee_import_template.xlsx"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
@@ -86,9 +115,17 @@ export default function EmployeeListPage() {
             <p style={S.sub}>Central record of all deployed manpower</p>
           </div>
           <div style={S.actions}>
+            <button style={S.btn} onClick={handleDownloadTemplate} title="Download blank template">
+              📋 Template
+            </button>
+            <button style={S.btn} onClick={() => importFileRef.current?.click()} disabled={importing}>
+              {importing ? "Importing…" : "📤 Import Excel"}
+            </button>
+            <input ref={importFileRef} type="file" accept=".xlsx" style={{ display: "none" }}
+              onChange={handleImportFile} />
             <button style={S.btn} onClick={handleExport} disabled={exporting}>
-            {exporting ? "Exporting…" : "📥 Export Excel"}
-          </button>
+              {exporting ? "Exporting…" : "📥 Export Excel"}
+            </button>
             <button style={S.btnSolid} onClick={openAdd}>+ Add Employee</button>
           </div>
         </div>
@@ -230,6 +267,54 @@ export default function EmployeeListPage() {
           initialTab={formTab}
         />
       )}
+
+      {/* Import result modal */}
+      {importResult && (
+        <div style={S.overlay} onClick={() => setImportResult(null)}>
+          <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+            {importResult.error ? (
+              <>
+                <div style={S.modalTitle}>Import Failed</div>
+                <div style={{ ...S.resultBadge, background: "#FDECEA", color: "#D2453F" }}>
+                  {importResult.error}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={S.modalTitle}>Import Complete</div>
+                <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+                  <div style={{ ...S.resultBadge, background: "#E1F4EC", color: "#15966A" }}>
+                    ✓ {importResult.created} employee{importResult.created !== 1 ? "s" : ""} created
+                  </div>
+                  {importResult.skipped > 0 && (
+                    <div style={{ ...S.resultBadge, background: "#FBE6E5", color: "#D2453F" }}>
+                      ✕ {importResult.skipped} skipped
+                    </div>
+                  )}
+                </div>
+                {importResult.errors?.length > 0 && (
+                  <div style={S.errorList}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6, color: "#D2453F" }}>
+                      Row errors:
+                    </div>
+                    {importResult.errors.map((e, i) => (
+                      <div key={i} style={S.errorRow}>
+                        <span style={{ fontWeight: 600 }}>Row {e.row} – {e.name}:</span> {e.error}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {importResult.created === 0 && importResult.skipped === 0 && (
+                  <div style={{ color: "#9AA6BF", fontSize: 13 }}>No data rows found in the file.</div>
+                )}
+              </>
+            )}
+            <div style={{ marginTop: 20, textAlign: "right" }}>
+              <button style={S.btnSolid} onClick={() => setImportResult(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -261,7 +346,13 @@ const S = {
   loginBadge: { fontSize: 10, fontWeight: 700, color: "#1E3563", background: "#D9E3F7", borderRadius: 4, padding: "1px 5px" },
   docsBadge:  { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#1E3563", background: "#D9E3F7", borderRadius: 6, padding: "3px 9px", cursor: "pointer" },
   docsUpload: { fontSize: 12, fontWeight: 600, color: "#9AA6BF", cursor: "pointer", textDecoration: "underline dotted" },
-  empty: { textAlign: "center", padding: 32, color: "#6B7793" },
+  empty:       { textAlign: "center", padding: 32, color: "#6B7793" },
+  overlay:     { position: "fixed", inset: 0, background: "rgba(15,30,61,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" },
+  modal:       { background: "#fff", borderRadius: 16, padding: 28, width: "min(520px, 95vw)", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 12px 40px rgba(0,0,0,.22)" },
+  modalTitle:  { fontFamily: "Archivo", fontSize: 18, fontWeight: 800, color: "#0F1E3D", marginBottom: 16 },
+  resultBadge: { display: "inline-flex", alignItems: "center", padding: "8px 14px", borderRadius: 9, fontWeight: 700, fontSize: 14 },
+  errorList:   { background: "#FFF8F7", border: "1px solid #F5C6C4", borderRadius: 9, padding: "10px 14px", maxHeight: 240, overflowY: "auto" },
+  errorRow:    { fontSize: 12.5, color: "#8B2020", padding: "4px 0", borderBottom: "1px solid #FADBD8" },
   pagination: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", gap: 8 },
   pgInfo: { fontSize: 12.5, color: "#6B7793" },
   pgButtons: { display: "flex", gap: 4 },

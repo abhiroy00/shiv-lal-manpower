@@ -44,6 +44,10 @@ export const employeesApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (r, e, { empId }) => [{ type: "Employee", id: `${empId}-docs` }],
     }),
+    importEmployees: build.mutation({
+      query: (formData) => ({ url: "/employees/import/", method: "POST", body: formData }),
+      invalidatesTags: ["Employee"],
+    }),
   }),
 });
 
@@ -57,4 +61,5 @@ export const {
   useGetEmployeeDocumentsQuery,
   useUploadEmployeeDocumentMutation,
   useDeleteEmployeeDocumentMutation,
+  useImportEmployeesMutation,
 } = employeesApi;
