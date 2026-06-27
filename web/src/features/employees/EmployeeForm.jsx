@@ -171,13 +171,18 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
           setCredentials(result.credentials);
         }
         // Upload any queued documents right after creation
+        let docsFailed = 0;
         for (const pd of pendingDocs) {
           const fd = new FormData();
           fd.append("doc_type", pd.docType);
           fd.append("file", pd.file);
-          try { await uploadDoc({ id: empId, formData: fd }).unwrap(); } catch { /* non-fatal */ }
+          try { await uploadDoc({ id: empId, formData: fd }).unwrap(); }
+          catch { docsFailed++; }
         }
         setPendingDocs([]);
+        if (docsFailed > 0) {
+          setUploadErr(`${docsFailed} document(s) failed to upload. Go to the Documents tab after saving to retry.`);
+        }
       }
 
       if (salary.basic && Number(salary.basic) > 0) {
