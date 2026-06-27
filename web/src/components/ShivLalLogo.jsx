@@ -22,12 +22,24 @@ export function ShivLalLogoFull({ width = 200 }) {
       <circle cx="200" cy="200" r="200" fill="#B71C1C" />
       {/* Everything clipped to the circle */}
       <g clipPath="url(#slm-circle)">
-        <polygon points="200,22 378,200 200,378 22,200" fill="none" stroke="#D4AF37" strokeWidth="4.5" />
-        <path d="M200,92 L264,116 L264,208 Q264,262 200,286 Q136,262 136,208 L136,116 Z" fill="none" stroke="#D4AF37" strokeWidth="4.5" />
-        <polygon points="200,122 212,157 248,157 220,178 230,213 200,192 170,213 180,178 152,157 188,157" fill="#D4AF37" />
-        <line x1="200" y1="213" x2="200" y2="286" stroke="#D4AF37" strokeWidth="4.5" />
-        <text textAnchor="middle" fontFamily="'Arial Black',Impact,sans-serif" fontSize="40" fontWeight="900" letterSpacing="1">
-          <tspan x="200" y="352" fill="#1A0500">M/S </tspan>
+        {/* Diamond — kept tighter so text has room below */}
+        <polygon points="200,28 368,196 200,344 32,196" fill="none" stroke="#D4AF37" strokeWidth="4" />
+        {/* Shield */}
+        <path d="M200,80 L258,102 L258,188 Q258,236 200,258 Q142,236 142,188 L142,102 Z" fill="none" stroke="#D4AF37" strokeWidth="4" />
+        {/* Star */}
+        <polygon points="200,108 211,141 246,141 219,161 229,194 200,174 171,194 181,161 154,141 189,141" fill="#D4AF37" />
+        {/* Pin line */}
+        <line x1="200" y1="194" x2="200" y2="258" stroke="#D4AF37" strokeWidth="4" />
+        {/* Text — centered at x=200, font-size tuned to fit circle width at y≈340 */}
+        <text
+          x="200" y="336"
+          textAnchor="middle"
+          fontFamily="'Arial Black',Impact,sans-serif"
+          fontSize="36"
+          fontWeight="900"
+          letterSpacing="2"
+        >
+          <tspan fill="#1A0500">M/S </tspan>
           <tspan fill="#D4AF37">SHIV </tspan>
           <tspan fill="#1A0500">LAL</tspan>
         </text>
