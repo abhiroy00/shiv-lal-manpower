@@ -5,6 +5,7 @@ import {
   useGetPendingReviewsQuery,
   useApproveAttendanceMutation,
   useRejectAttendanceMutation,
+  useBulkApproveAttendanceMutation,
 } from "./attendanceApi";
 
 const STATUS_COLORS = {
@@ -17,13 +18,31 @@ const STATUS_COLORS = {
 // ── Under Review panel ────────────────────────────────────────
 function ReviewPanel() {
   const { data, isLoading, refetch } = useGetPendingReviewsQuery();
-  const [approve] = useApproveAttendanceMutation();
-  const [reject]  = useRejectAttendanceMutation();
-  const [notes,  setNotes]  = useState({});   // { [id]: string }
-  const [busy,   setBusy]   = useState({});   // { [id]: bool }
-  const [result, setResult] = useState({});   // { [id]: 'approved'|'rejected'|string(err) }
+  const [approve]      = useApproveAttendanceMutation();
+  const [reject]       = useRejectAttendanceMutation();
+  const [bulkApprove]  = useBulkApproveAttendanceMutation();
+  const [notes,  setNotes]  = useState({});
+  const [busy,   setBusy]   = useState({});
+  const [result, setResult] = useState({});
+  const [bulkBusy,   setBulkBusy]   = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
 
   const records = data?.results || data || [];
+
+  const handleBulkApprove = async () => {
+    if (!window.confirm(`Approve all ${records.length} pending record(s)? This cannot be undone.`)) return;
+    setBulkBusy(true);
+    setBulkResult(null);
+    try {
+      const res = await bulkApprove().unwrap();
+      setBulkResult({ ok: true, msg: `✓ ${res.approved} record(s) approved successfully.` });
+      refetch();
+    } catch (e) {
+      setBulkResult({ ok: false, msg: e?.data?.detail || "Bulk approve failed." });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const handleApprove = async (id) => {
     setBusy((b) => ({ ...b, [id]: true }));
@@ -57,6 +76,25 @@ function ReviewPanel() {
 
   return (
     <div>
+      {/* Approve All bar */}
+      {records.length > 0 && (
+        <div style={R.bulkBar}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#0F1E3D" }}>
+            {records.length} record{records.length !== 1 ? "s" : ""} pending review
+          </span>
+          <button
+            style={{ ...R.approveBtn, opacity: bulkBusy ? .6 : 1, fontSize: 14, padding: "9px 22px" }}
+            disabled={bulkBusy}
+            onClick={handleBulkApprove}
+          >
+            {bulkBusy ? "Approving…" : `✓ Approve All (${records.length})`}
+          </button>
+        </div>
+      )}
+      {bulkResult && (
+        <div style={bulkResult.ok ? R.resultOk : R.resultErr}>{bulkResult.msg}</div>
+      )}
+
       {/* Info banner */}
       <div style={R.banner}>
         <span style={R.bannerIcon}>⏱</span>
@@ -308,6 +346,7 @@ const S = {
 };
 
 const R = {
+  bulkBar:    { display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", border: "1px solid #E2E7F0", borderRadius: 10, padding: "12px 16px", marginBottom: 12, flexWrap: "wrap", gap: 10 },
   banner:     { display: "flex", alignItems: "flex-start", gap: 10, background: "#FFFBE6", border: "1px solid #F5D78E", borderRadius: 10, padding: "11px 14px", marginBottom: 16, fontSize: 13, color: "#5A4000", lineHeight: 1.6 },
   bannerIcon: { fontSize: 18, flexShrink: 0, marginTop: 1 },
   empty:      { textAlign: "center", padding: "60px 20px", color: "#9AA6BF", fontSize: 15 },

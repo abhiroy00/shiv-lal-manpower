@@ -102,6 +102,23 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         h, m = getattr(settings, "LATE_THRESHOLD", (9, 30))
         return time(h, m)
 
+    @action(detail=False, methods=["post"], url_path="bulk-approve")
+    def bulk_approve(self, request):
+        """HR/Admin: approve all 'review' attendance records in one shot."""
+        if request.user.role not in ("admin", "hr"):
+            return Response({"detail": "Permission denied."}, status=403)
+        threshold = self._late_threshold()
+        qs = Attendance.objects.filter(status="review")
+        updated = 0
+        for att in qs:
+            att.status = "late" if (att.check_in_time and att.check_in_time > threshold) else "present"
+            att.reviewed_by = request.user
+            att.reviewed_at = timezone.now()
+            att.review_note = "Bulk approved"
+            att.save()
+            updated += 1
+        return Response({"approved": updated})
+
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         """HR/Admin: approve a review attendance → auto-determine present/late from check_in_time."""

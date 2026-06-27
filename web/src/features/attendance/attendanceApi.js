@@ -30,6 +30,10 @@ export const attendanceApi = baseApi.injectEndpoints({
       query: ({ id, note }) => ({ url: `/attendance/${id}/reject/`, method: "POST", body: { note } }),
       invalidatesTags: ["AttendanceReview", "Attendance"],
     }),
+    bulkApproveAttendance: build.mutation({
+      query: () => ({ url: "/attendance/bulk-approve/", method: "POST" }),
+      invalidatesTags: ["AttendanceReview", "Attendance"],
+    }),
   }),
 });
 
@@ -41,4 +45,5 @@ export const {
   useGetPendingReviewsQuery,
   useApproveAttendanceMutation,
   useRejectAttendanceMutation,
+  useBulkApproveAttendanceMutation,
 } = attendanceApi;
