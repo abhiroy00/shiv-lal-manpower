@@ -22,7 +22,7 @@ export default function DashboardLayout() {
       {/* Sidebar */}
       <aside style={{ ...S.sidebar, ...(sidebarOpen ? S.sidebarOpen : {}) }}>
         <div style={S.brand}>
-          <div style={{ width: 46, height: 46, borderRadius: 10, overflow: "hidden", flexShrink: 0, backgroundColor: "#B71C1C" }}>
+          <div style={{ width: 58, height: 58, borderRadius: 12, overflow: "hidden", flexShrink: 0, backgroundColor: "#B71C1C", border: "2.5px solid #D4AF37", boxShadow: "0 0 0 4px rgba(212,175,55,0.25)" }}>
             <img src="/shivlal_logo.jpeg" alt="Shiv Lal" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           </div>
           <div>
