@@ -5,21 +5,29 @@ import { useLoginMutation } from "./authApi";
 import { setCredentials } from "./authSlice";
 import { ShivLalLogoFull } from "../../components/ShivLalLogo";
 
+const ALLOWED_ROLES = ["admin", "hr"];
+
 export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [accessError, setAccessError] = useState("");
   const [login, { isLoading, error }] = useLoginMutation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setAccessError("");
     try {
       const data = await login({ phone, password }).unwrap();
       const meRes = await fetch("/api/auth/me/", {
         headers: { Authorization: `Bearer ${data.access}` },
       });
       const user = await meRes.json();
+      if (!ALLOWED_ROLES.includes(user.role)) {
+        setAccessError("Access denied. This portal is for Admin / HR only. Use the mobile app.");
+        return;
+      }
       dispatch(setCredentials({ accessToken: data.access, refreshToken: data.refresh, user }));
       navigate("/dashboard");
     } catch {}
@@ -66,6 +74,7 @@ export default function LoginPage() {
             placeholder="Password"
           />
           {error && <div style={styles.err}>Invalid credentials. Try again.</div>}
+          {accessError && <div style={styles.err}>{accessError}</div>}
           <button type="submit" style={styles.submit} disabled={isLoading}>
             {isLoading ? "Signing in…" : "Sign in →"}
           </button>
