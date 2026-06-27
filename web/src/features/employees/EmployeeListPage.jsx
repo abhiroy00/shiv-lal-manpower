@@ -16,6 +16,7 @@ export default function EmployeeListPage() {
   const [status, setStatus]             = useState("");
   const [page, setPage]                 = useState(1);
   const [formEmployee, setFormEmployee] = useState(null); // null=closed, {}=add, obj=edit
+  const [formTab, setFormTab]           = useState(0);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const { data, isLoading } = useGetEmployeesQuery({
@@ -40,9 +41,10 @@ export default function EmployeeListPage() {
     }
   };
 
-  const openAdd   = ()    => setFormEmployee({});
-  const openEdit  = (emp) => setFormEmployee(emp);
-  const closeForm = ()    => setFormEmployee(null);
+  const openAdd      = ()         => { setFormTab(0); setFormEmployee({}); };
+  const openEdit     = (emp)      => { setFormTab(0); setFormEmployee(emp); };
+  const openEditDocs = (e, emp)   => { e.stopPropagation(); setFormTab(5); setFormEmployee(emp); };
+  const closeForm    = ()         => setFormEmployee(null);
 
   const handleExport = async () => {
     setExporting(true);
@@ -110,14 +112,14 @@ export default function EmployeeListPage() {
           <table style={S.table}>
             <thead>
               <tr>
-                {["Employee", "Designation", "Site", "Phone", "Joined", "Status", ""].map((h) => (
+                {["Employee", "Designation", "Site", "Phone", "Joined", "Status", "Documents", ""].map((h) => (
                   <th key={h} style={S.th}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={7} style={S.empty}>Loading…</td></tr>
+                <tr><td colSpan={8} style={S.empty}>Loading…</td></tr>
               )}
               {employees.map((emp) => {
                 const sc = STATUS_COLORS[emp.status] || STATUS_COLORS.inactive;
@@ -145,6 +147,13 @@ export default function EmployeeListPage() {
                       <span style={{ ...S.pill, background: sc.bg, color: sc.color }}>
                         {emp.status.replace("_", " ")}
                       </span>
+                    </td>
+                    <td style={S.td} onClick={(e) => openEditDocs(e, emp)}>
+                      {emp.doc_count > 0 ? (
+                        <span style={S.docsBadge}>📄 {emp.doc_count}</span>
+                      ) : (
+                        <span style={S.docsUpload}>+ Upload</span>
+                      )}
                     </td>
                     <td style={S.td} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -179,7 +188,7 @@ export default function EmployeeListPage() {
                 );
               })}
               {!isLoading && employees.length === 0 && (
-                <tr><td colSpan={7} style={S.empty}>No employees found</td></tr>
+                <tr><td colSpan={8} style={S.empty}>No employees found</td></tr>
               )}
             </tbody>
           </table>
@@ -214,7 +223,12 @@ export default function EmployeeListPage() {
       </div>
 
       {formEmployee !== null && (
-        <EmployeeForm employee={formEmployee} onClose={closeForm} />
+        <EmployeeForm
+          key={`${formEmployee?.id || "new"}-${formTab}`}
+          employee={formEmployee}
+          onClose={closeForm}
+          initialTab={formTab}
+        />
       )}
     </>
   );
@@ -245,6 +259,8 @@ const S = {
   deleteBtn: { color: "#D2453F", border: "1px solid #f5c6c4" },
   deleteBtnConfirm: { color: "#fff", background: "#D2453F", border: "1px solid #D2453F" },
   loginBadge: { fontSize: 10, fontWeight: 700, color: "#1E3563", background: "#D9E3F7", borderRadius: 4, padding: "1px 5px" },
+  docsBadge:  { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#1E3563", background: "#D9E3F7", borderRadius: 6, padding: "3px 9px", cursor: "pointer" },
+  docsUpload: { fontSize: 12, fontWeight: 600, color: "#9AA6BF", cursor: "pointer", textDecoration: "underline dotted" },
   empty: { textAlign: "center", padding: 32, color: "#6B7793" },
   pagination: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", gap: 8 },
   pgInfo: { fontSize: 12.5, color: "#6B7793" },

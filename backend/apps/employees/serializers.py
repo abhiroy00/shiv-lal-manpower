@@ -37,14 +37,18 @@ class EmployeeSerializer(serializers.ModelSerializer):
 class EmployeeListSerializer(serializers.ModelSerializer):
     site_name = serializers.CharField(source="site.name", read_only=True)
     has_login = serializers.SerializerMethodField()
+    doc_count = serializers.SerializerMethodField()
 
     class Meta:
         model  = Employee
         fields = ("id", "emp_code", "full_name", "phone", "designation",
-                  "site", "site_name", "status", "date_joined", "has_login")
+                  "site", "site_name", "status", "date_joined", "has_login", "doc_count")
 
     def get_has_login(self, obj):
         try:
             return obj.user_account is not None
         except Exception:
             return False
+
+    def get_doc_count(self, obj):
+        return obj.documents.count()

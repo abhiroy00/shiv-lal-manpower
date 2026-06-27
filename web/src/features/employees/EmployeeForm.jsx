@@ -39,10 +39,10 @@ const EMPTY = {
   bank_account: "", ifsc: "", tds: "",
 };
 
-export default function EmployeeForm({ employee, onClose }) {
+export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
   const isEdit = Boolean(employee?.id);
 
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState(initialTab);
   const [form, setForm] = useState(EMPTY);
   const [customDesig, setCustomDesig] = useState("");
   const [errors, setErrors] = useState({});
