@@ -25,6 +25,25 @@ export const employeesApi = baseApi.injectEndpoints({
     resetEmployeePassword: build.mutation({
       query: (id) => ({ url: `/employees/${id}/reset-password/`, method: "POST" }),
     }),
+    getEmployeeDocuments: build.query({
+      query: (id) => `/employees/${id}/documents/`,
+      providesTags: (r, e, id) => [{ type: "Employee", id: `${id}-docs` }],
+    }),
+    uploadEmployeeDocument: build.mutation({
+      query: ({ id, formData }) => ({
+        url: `/employees/${id}/documents/`,
+        method: "POST",
+        body: formData,
+      }),
+      invalidatesTags: (r, e, { id }) => [{ type: "Employee", id: `${id}-docs` }],
+    }),
+    deleteEmployeeDocument: build.mutation({
+      query: ({ empId, docId }) => ({
+        url: `/employees/${empId}/documents/${docId}/`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (r, e, { empId }) => [{ type: "Employee", id: `${empId}-docs` }],
+    }),
   }),
 });
 
@@ -35,4 +54,7 @@ export const {
   useUpdateEmployeeMutation,
   useDeleteEmployeeMutation,
   useResetEmployeePasswordMutation,
+  useGetEmployeeDocumentsQuery,
+  useUploadEmployeeDocumentMutation,
+  useDeleteEmployeeDocumentMutation,
 } = employeesApi;

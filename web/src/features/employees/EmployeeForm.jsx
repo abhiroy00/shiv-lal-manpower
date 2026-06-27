@@ -3,6 +3,9 @@ import {
   useCreateEmployeeMutation,
   useUpdateEmployeeMutation,
   useResetEmployeePasswordMutation,
+  useGetEmployeeDocumentsQuery,
+  useUploadEmployeeDocumentMutation,
+  useDeleteEmployeeDocumentMutation,
 } from "./employeesApi";
 import { useGetSitesQuery } from "../deployment/deploymentApi";
 import {
@@ -15,7 +18,16 @@ const DESIGNATIONS = [
   "Data Entry Operator", "Site Supervisor", "Other",
 ];
 
-const TABS = ["Basic Info", "Deployment", "Compliance & ID", "Banking", "Salary"];
+const STD_DESIGNATIONS = DESIGNATIONS.filter((d) => d !== "Other");
+
+const DOC_TYPE_LABELS = {
+  aadhar: "Aadhar",
+  pan: "PAN",
+  photo: "Photo",
+  other: "Other / Combined",
+};
+
+const FORM_TABS = ["Basic Info", "Deployment", "Compliance & ID", "Banking", "Salary"];
 
 const TODAY = new Date().toISOString().split("T")[0];
 
@@ -28,31 +40,45 @@ const EMPTY = {
 
 export default function EmployeeForm({ employee, onClose }) {
   const isEdit = Boolean(employee?.id);
+  const TABS = isEdit ? [...FORM_TABS, "Documents"] : FORM_TABS;
+
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState(EMPTY);
+  const [customDesig, setCustomDesig] = useState("");
   const [errors, setErrors] = useState({});
-  const [credentials, setCredentials] = useState(null); // shown after creation
+  const [credentials, setCredentials] = useState(null);
 
   const [salary, setSalary] = useState({ basic: "", hra: "", da: "", other_allowances: "" });
+
+  // Document upload state
+  const [docType, setDocType] = useState("other");
+  const [docFile, setDocFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState("");
 
   const { data: sitesData } = useGetSitesQuery({});
   const sites = sitesData?.results || [];
 
   const { data: salaryData } = useGetSalaryStructureQuery(employee?.id, { skip: !isEdit || !employee?.id });
+  const { data: docs = [] } = useGetEmployeeDocumentsQuery(employee?.id, { skip: !isEdit || !employee?.id });
 
   const [createEmployee, { isLoading: creating }] = useCreateEmployeeMutation();
   const [updateEmployee, { isLoading: updating }] = useUpdateEmployeeMutation();
   const [resetPassword, { isLoading: resetting }] = useResetEmployeePasswordMutation();
   const [upsertSalary] = useUpsertSalaryStructureMutation();
+  const [uploadDoc] = useUploadEmployeeDocumentMutation();
+  const [deleteDoc] = useDeleteEmployeeDocumentMutation();
   const saving = creating || updating;
 
   useEffect(() => {
     if (isEdit) {
+      const rawDesig = employee.designation || "";
+      const isStandard = STD_DESIGNATIONS.includes(rawDesig);
       setForm({
         emp_code:      employee.emp_code      || "",
         full_name:     employee.full_name     || "",
         phone:         employee.phone         || "",
-        designation:   employee.designation   || "",
+        designation:   isStandard ? rawDesig : "Other",
         status:        employee.status        || "active",
         date_joined:   employee.date_joined   || "",
         date_of_birth: employee.date_of_birth || "",
@@ -66,16 +92,19 @@ export default function EmployeeForm({ employee, onClose }) {
         ifsc:          employee.ifsc          || "",
         tds:           employee.tds           || "",
       });
+      setCustomDesig(isStandard ? "" : (rawDesig === "Other" ? "" : rawDesig));
     } else {
       setForm(EMPTY);
+      setCustomDesig("");
     }
     setErrors({});
     setCredentials(null);
     setSalary({ basic: "", hra: "", da: "", other_allowances: "" });
+    setDocFile(null);
+    setUploadErr("");
     setTab(0);
   }, [employee]);
 
-  // Pre-fill salary when existing structure loads
   useEffect(() => {
     if (salaryData) {
       const s = salaryData?.results?.[0] ?? salaryData?.[0];
@@ -99,6 +128,7 @@ export default function EmployeeForm({ employee, onClose }) {
     if (!form.full_name.trim()) e.full_name  = "Required";
     if (!form.phone.trim())     e.phone      = "Required";
     if (!form.designation)      e.designation = "Required";
+    if (form.designation === "Other" && !customDesig.trim()) e.designation = "Enter a designation name";
     if (!form.date_joined)      e.date_joined = "Required";
     if (form.phone && !/^\d{10}$/.test(form.phone))                    e.phone  = "Enter valid 10-digit mobile";
     if (form.aadhar && !/^\d{12}$/.test(form.aadhar))                  e.aadhar = "Aadhar must be 12 digits";
@@ -122,6 +152,7 @@ export default function EmployeeForm({ employee, onClose }) {
 
     const payload = {
       ...form,
+      designation:   form.designation === "Other" ? customDesig.trim() : form.designation,
       site:          form.site          || null,
       date_of_birth: form.date_of_birth || null,
     };
@@ -140,7 +171,6 @@ export default function EmployeeForm({ employee, onClose }) {
         }
       }
 
-      // Save salary structure if basic is filled
       if (salary.basic && Number(salary.basic) > 0) {
         await upsertSalary({
           employee:         empId,
@@ -168,7 +198,35 @@ export default function EmployeeForm({ employee, onClose }) {
       const result = await resetPassword(employee.id).unwrap();
       setCredentials({ phone: result.phone, default_password: result.default_password });
     } catch {
-      // ignore – button just stays enabled
+      // ignore
+    }
+  };
+
+  const handleUploadDoc = async () => {
+    if (!docFile) { setUploadErr("Please select a file."); return; }
+    setUploadErr("");
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("doc_type", docType);
+      fd.append("file", docFile);
+      await uploadDoc({ id: employee.id, formData: fd }).unwrap();
+      setDocFile(null);
+      const inp = document.getElementById("doc-file-input");
+      if (inp) inp.value = "";
+    } catch {
+      setUploadErr("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteDoc = async (docId) => {
+    if (!window.confirm("Delete this document?")) return;
+    try {
+      await deleteDoc({ empId: employee.id, docId }).unwrap();
+    } catch {
+      // ignore
     }
   };
 
@@ -177,12 +235,15 @@ export default function EmployeeForm({ employee, onClose }) {
     ...(errors[field] ? { borderColor: "#D2453F", background: "#FBE6E5" } : {}),
   });
 
+  const isDocTab = tab === 5 && isEdit;
+  const lastFormTabIdx = FORM_TABS.length - 1; // 4
+
   return (
     <>
       {/* Backdrop */}
       <div style={S.backdrop} onClick={credentials ? undefined : onClose} />
 
-      {/* Credentials modal — shown over the drawer after adding employee */}
+      {/* Credentials modal */}
       {credentials && (
         <div style={S.modalWrap}>
           <div style={S.modal}>
@@ -270,6 +331,15 @@ export default function EmployeeForm({ employee, onClose }) {
                     <option value="">Select designation</option>
                     {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
                   </select>
+                  {form.designation === "Other" && (
+                    <input
+                      style={{ ...S.input, marginTop: 8 }}
+                      value={customDesig}
+                      onChange={(e) => { setCustomDesig(e.target.value); setErrors((er) => ({ ...er, designation: undefined })); }}
+                      placeholder="Enter designation name (e.g. Electrician)"
+                      autoFocus
+                    />
+                  )}
                 </Field>
               </div>
 
@@ -407,7 +477,6 @@ export default function EmployeeForm({ employee, onClose }) {
                 <input style={S.input} type="number" min="0" value={salary.other_allowances}
                   onChange={setSal("other_allowances")} placeholder="0" />
               </Field>
-              {/* Gross preview */}
               {salary.basic && (
                 <div style={S.grossPreview}>
                   <span style={S.grossLabel}>Monthly Gross</span>
@@ -421,10 +490,82 @@ export default function EmployeeForm({ employee, onClose }) {
                   </span>
                 </div>
               )}
-              <div style={S.infoBox} >
+              <div style={S.infoBox}>
                 <b>PF:</b> 12% of gross · <b>ESI:</b> 0.75% of gross (if gross ≤ ₹21,000).
                 Payslips are generated proportionally based on attendance.
               </div>
+            </div>
+          )}
+
+          {/* ── Tab 5: Documents (edit only) ── */}
+          {tab === 5 && isEdit && (
+            <div style={S.section}>
+              {/* Upload card */}
+              <div style={S.docUploadCard}>
+                <div style={S.docCardTitle}>Upload Document</div>
+                <Field label="Document Type">
+                  <select style={S.input} value={docType} onChange={(e) => setDocType(e.target.value)}>
+                    <option value="aadhar">Aadhar</option>
+                    <option value="pan">PAN</option>
+                    <option value="photo">Photo</option>
+                    <option value="other">Other / Combined PDF</option>
+                  </select>
+                </Field>
+                <Field label="File (PDF or Image)">
+                  <input
+                    id="doc-file-input"
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    style={S.fileInput}
+                    onChange={(e) => { setDocFile(e.target.files[0] || null); setUploadErr(""); }}
+                  />
+                </Field>
+                {uploadErr && <div style={S.errMsg}>{uploadErr}</div>}
+                <button
+                  style={{ ...S.uploadBtn, ...(uploading || !docFile ? S.uploadBtnDisabled : {}) }}
+                  onClick={handleUploadDoc}
+                  disabled={uploading || !docFile}
+                >
+                  {uploading ? "Uploading…" : "Upload Document"}
+                </button>
+              </div>
+
+              {/* Document list */}
+              <div style={S.docListHeader}>
+                <span style={S.docListTitle}>Uploaded Documents</span>
+                <span style={S.docCount}>{docs.length} file{docs.length !== 1 ? "s" : ""}</span>
+              </div>
+              {docs.length === 0 ? (
+                <div style={S.docEmpty}>
+                  No documents uploaded yet. Use the form above to upload Aadhar, PAN, or a combined PDF.
+                </div>
+              ) : (
+                docs.map((doc) => (
+                  <div key={doc.id} style={S.docItem}>
+                    <div style={S.docItemLeft}>
+                      <div style={S.docIconWrap}>
+                        {doc.file?.endsWith(".pdf") ? "📄" : "🖼️"}
+                      </div>
+                      <div>
+                        <div style={S.docTypeLabel}>{DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}</div>
+                        <div style={S.docDate}>
+                          {new Date(doc.uploaded_at).toLocaleDateString("en-IN", {
+                            day: "numeric", month: "short", year: "numeric",
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={S.docItemRight}>
+                      <a href={doc.file} target="_blank" rel="noopener noreferrer" style={S.docViewBtn}>
+                        View
+                      </a>
+                      <button style={S.docDeleteBtn} onClick={() => handleDeleteDoc(doc.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -443,12 +584,24 @@ export default function EmployeeForm({ employee, onClose }) {
             {tab > 0 && (
               <button style={S.prevBtn} onClick={() => setTab(tab - 1)} disabled={saving}>← Previous</button>
             )}
-            {tab < TABS.length - 1 ? (
+            {/* Tabs 0–3: always show Next */}
+            {tab < lastFormTabIdx && (
               <button style={S.nextBtn} onClick={() => setTab(tab + 1)}>Next →</button>
-            ) : (
-              <button style={S.saveBtn} onClick={handleSubmit} disabled={saving}>
-                {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Employee"}
-              </button>
+            )}
+            {/* Salary tab (4): show Save, plus "Documents →" if editing */}
+            {tab === lastFormTabIdx && (
+              <>
+                <button style={S.saveBtn} onClick={handleSubmit} disabled={saving}>
+                  {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Employee"}
+                </button>
+                {isEdit && (
+                  <button style={S.nextBtn} onClick={() => setTab(5)}>Documents →</button>
+                )}
+              </>
+            )}
+            {/* Documents tab: just Done */}
+            {isDocTab && (
+              <button style={S.cancelBtn} onClick={onClose}>Done</button>
             )}
           </div>
         </div>
@@ -503,8 +656,8 @@ const S = {
     overflowX: "auto",
   },
   tab: {
-    padding: "12px 16px", border: 0, background: "transparent",
-    fontSize: 13, fontWeight: 600, color: "#6B7793", cursor: "pointer",
+    padding: "12px 14px", border: 0, background: "transparent",
+    fontSize: 12.5, fontWeight: 600, color: "#6B7793", cursor: "pointer",
     borderBottom: "2px solid transparent", whiteSpace: "nowrap",
   },
   tabOn:  { color: "#0F1E3D", borderBottomColor: "#E8821E" },
@@ -569,6 +722,52 @@ const S = {
   pwdStatusIcon:  { fontSize: 18, flexShrink: 0 },
   pwdStatusTitle: { fontSize: 12.5, fontWeight: 700, color: "#0F1E3D" },
   pwdStatusSub:   { fontSize: 11.5, color: "#6B7793", marginTop: 2 },
+  // Documents tab
+  docUploadCard: {
+    background: "#F4F6FA", border: "1px solid #E2E7F0", borderRadius: 12,
+    padding: "16px 18px", marginBottom: 20,
+  },
+  docCardTitle: {
+    fontSize: 13, fontWeight: 700, color: "#0F1E3D", marginBottom: 14,
+  },
+  fileInput: {
+    width: "100%", padding: "8px 0", fontSize: 13, fontFamily: "inherit",
+    color: "#0F1E3D", cursor: "pointer", boxSizing: "border-box",
+  },
+  uploadBtn: {
+    marginTop: 6, padding: "9px 18px", borderRadius: 9, border: 0,
+    background: "#1E3563", color: "#fff", fontSize: 13, fontWeight: 600,
+    cursor: "pointer", width: "100%",
+  },
+  uploadBtnDisabled: { background: "#B0B9CE", cursor: "not-allowed" },
+  docListHeader: {
+    display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10,
+  },
+  docListTitle: { fontSize: 12, fontWeight: 700, color: "#6B7793", textTransform: "uppercase", letterSpacing: ".08em" },
+  docCount:     { fontSize: 12, color: "#9AA6BF" },
+  docEmpty: {
+    fontSize: 13, color: "#9AA6BF", textAlign: "center", padding: "28px 16px",
+    background: "#F4F6FA", borderRadius: 10, border: "1px dashed #D0D7E5",
+  },
+  docItem: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    padding: "12px 14px", borderRadius: 10, border: "1px solid #E2E7F0",
+    marginBottom: 8, background: "#fff",
+  },
+  docItemLeft:  { display: "flex", alignItems: "center", gap: 12 },
+  docIconWrap:  { fontSize: 24, flexShrink: 0 },
+  docTypeLabel: { fontSize: 13, fontWeight: 700, color: "#0F1E3D" },
+  docDate:      { fontSize: 11.5, color: "#9AA6BF", marginTop: 2 },
+  docItemRight: { display: "flex", gap: 8, alignItems: "center" },
+  docViewBtn: {
+    padding: "6px 12px", borderRadius: 7, background: "#E8F0FE",
+    color: "#1E3563", fontSize: 12, fontWeight: 600, textDecoration: "none",
+    border: "1px solid #C5D3F0",
+  },
+  docDeleteBtn: {
+    padding: "6px 10px", borderRadius: 7, border: "1px solid #F5C6C4",
+    background: "#FBE6E5", color: "#D2453F", fontSize: 12, fontWeight: 600, cursor: "pointer",
+  },
   // Credentials modal
   modalWrap: {
     position: "fixed", inset: 0, zIndex: 200,

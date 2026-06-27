@@ -1,6 +1,7 @@
 import io
 from datetime import date
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -211,10 +212,18 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get", "post"])
     def documents(self, request, pk=None):
         employee = self.get_object()
+        ctx = {"request": request}
         if request.method == "POST":
-            serializer = EmployeeDocumentSerializer(data=request.data)
+            serializer = EmployeeDocumentSerializer(data=request.data, context=ctx)
             serializer.is_valid(raise_exception=True)
             serializer.save(employee=employee)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         docs = employee.documents.all()
-        return Response(EmployeeDocumentSerializer(docs, many=True).data)
+        return Response(EmployeeDocumentSerializer(docs, many=True, context=ctx).data)
+
+    @action(detail=True, methods=["delete"], url_path=r"documents/(?P<doc_id>[^/.]+)")
+    def delete_document(self, request, pk=None, doc_id=None):
+        employee = self.get_object()
+        doc = get_object_or_404(EmployeeDocument, pk=doc_id, employee=employee)
+        doc.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
