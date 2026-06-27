@@ -88,6 +88,8 @@ services:
     restart: always
     ports:
       - "8080:80"
+    volumes:
+      - media_data:/usr/share/nginx/media:ro
     depends_on:
       - api
 
