@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { useLoginMutation } from "./authApi";
 import { setCredentials } from "./authSlice";
-import { ShivLalLogoFull } from "../../components/ShivLalLogo";
 
 const ALLOWED_ROLES = ["admin", "hr"];
 
@@ -36,7 +35,9 @@ export default function LoginPage() {
   return (
     <div style={styles.wrap}>
       <div style={styles.brand}>
-        <ShivLalLogoFull width={160} />
+        <div style={styles.logoCircle}>
+          <img src="/shivlal_logo.jpeg" alt="M/S Shiv Lal" style={styles.logoImg} />
+        </div>
         <div style={styles.eyebrow}>Manpower Operations Console</div>
         <h1 style={styles.h1}>Shiv Lal Manpower<br />Management Portal</h1>
         <p style={styles.tagline}>
@@ -104,4 +105,6 @@ const styles = {
   err: { color: "#D2453F", fontSize: 12.5, marginTop: 8 },
   submit: { width: "100%", marginTop: 16, padding: 13, border: 0, borderRadius: 10, background: "#E8821E", color: "#fff", fontWeight: 700, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" },
   foot: { marginTop: 18, fontSize: 12, color: "#9AA6BF", textAlign: "center" },
+  logoCircle: { width: 160, height: 160, borderRadius: "50%", overflow: "hidden", marginBottom: 20, border: "3px solid #D4AF37", boxShadow: "0 0 0 6px rgba(212,175,55,0.2)" },
+  logoImg: { width: "100%", height: "100%", objectFit: "cover" },
 };
