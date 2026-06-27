@@ -6,7 +6,7 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeDocument
         fields = "__all__"
-        read_only_fields = ("uploaded_at",)
+        read_only_fields = ("uploaded_at", "employee")
 
 
 class EmployeeSerializer(serializers.ModelSerializer):

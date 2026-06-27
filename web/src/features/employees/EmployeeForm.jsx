@@ -27,7 +27,8 @@ const DOC_TYPE_LABELS = {
   other: "Other / Combined",
 };
 
-const FORM_TABS = ["Basic Info", "Deployment", "Compliance & ID", "Banking", "Salary"];
+const TABS = ["Basic Info", "Deployment", "Compliance & ID", "Banking", "Salary", "Documents"];
+const LAST_FORM_TAB = 4; // Salary index
 
 const TODAY = new Date().toISOString().split("T")[0];
 
@@ -40,7 +41,6 @@ const EMPTY = {
 
 export default function EmployeeForm({ employee, onClose }) {
   const isEdit = Boolean(employee?.id);
-  const TABS = isEdit ? [...FORM_TABS, "Documents"] : FORM_TABS;
 
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState(EMPTY);
@@ -50,11 +50,13 @@ export default function EmployeeForm({ employee, onClose }) {
 
   const [salary, setSalary] = useState({ basic: "", hra: "", da: "", other_allowances: "" });
 
-  // Document upload state
+  // Document upload
   const [docType, setDocType] = useState("other");
   const [docFile, setDocFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState("");
+  // Queue for create mode (uploaded after employee is created)
+  const [pendingDocs, setPendingDocs] = useState([]);
 
   const { data: sitesData } = useGetSitesQuery({});
   const sites = sitesData?.results || [];
@@ -102,6 +104,7 @@ export default function EmployeeForm({ employee, onClose }) {
     setSalary({ basic: "", hra: "", da: "", other_allowances: "" });
     setDocFile(null);
     setUploadErr("");
+    setPendingDocs([]);
     setTab(0);
   }, [employee]);
 
@@ -124,9 +127,9 @@ export default function EmployeeForm({ employee, onClose }) {
 
   const validate = () => {
     const e = {};
-    if (!form.emp_code.trim())  e.emp_code   = "Required";
-    if (!form.full_name.trim()) e.full_name  = "Required";
-    if (!form.phone.trim())     e.phone      = "Required";
+    if (!form.emp_code.trim())  e.emp_code    = "Required";
+    if (!form.full_name.trim()) e.full_name   = "Required";
+    if (!form.phone.trim())     e.phone       = "Required";
     if (!form.designation)      e.designation = "Required";
     if (form.designation === "Other" && !customDesig.trim()) e.designation = "Enter a designation name";
     if (!form.date_joined)      e.date_joined = "Required";
@@ -141,12 +144,9 @@ export default function EmployeeForm({ employee, onClose }) {
     const e = validate();
     if (Object.keys(e).length) {
       setErrors(e);
-      const basicFields = ["emp_code", "full_name", "phone", "designation", "date_joined"];
-      const compFields  = ["aadhar", "pan"];
-      const bankFields  = ["ifsc"];
-      if (basicFields.some((f) => e[f]))     setTab(0);
-      else if (compFields.some((f) => e[f])) setTab(2);
-      else if (bankFields.some((f) => e[f])) setTab(3);
+      if (["emp_code","full_name","phone","designation","date_joined"].some(f => e[f])) setTab(0);
+      else if (["aadhar","pan"].some(f => e[f]))                                         setTab(2);
+      else if (["ifsc"].some(f => e[f]))                                                 setTab(3);
       return;
     }
 
@@ -156,6 +156,7 @@ export default function EmployeeForm({ employee, onClose }) {
       site:          form.site          || null,
       date_of_birth: form.date_of_birth || null,
     };
+
     try {
       let empId;
       let newCredentials = null;
@@ -169,6 +170,14 @@ export default function EmployeeForm({ employee, onClose }) {
           newCredentials = result.credentials;
           setCredentials(result.credentials);
         }
+        // Upload any queued documents right after creation
+        for (const pd of pendingDocs) {
+          const fd = new FormData();
+          fd.append("doc_type", pd.docType);
+          fd.append("file", pd.file);
+          try { await uploadDoc({ id: empId, formData: fd }).unwrap(); } catch { /* non-fatal */ }
+        }
+        setPendingDocs([]);
       }
 
       if (salary.basic && Number(salary.basic) > 0) {
@@ -197,11 +206,10 @@ export default function EmployeeForm({ employee, onClose }) {
     try {
       const result = await resetPassword(employee.id).unwrap();
       setCredentials({ phone: result.phone, default_password: result.default_password });
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   };
 
+  // Edit mode: upload immediately
   const handleUploadDoc = async () => {
     if (!docFile) { setUploadErr("Please select a file."); return; }
     setUploadErr("");
@@ -221,13 +229,19 @@ export default function EmployeeForm({ employee, onClose }) {
     }
   };
 
+  // Create mode: add to queue
+  const handleQueueDoc = () => {
+    if (!docFile) { setUploadErr("Please select a file."); return; }
+    setUploadErr("");
+    setPendingDocs((p) => [...p, { docType, file: docFile }]);
+    setDocFile(null);
+    const inp = document.getElementById("doc-file-input");
+    if (inp) inp.value = "";
+  };
+
   const handleDeleteDoc = async (docId) => {
     if (!window.confirm("Delete this document?")) return;
-    try {
-      await deleteDoc({ empId: employee.id, docId }).unwrap();
-    } catch {
-      // ignore
-    }
+    try { await deleteDoc({ empId: employee.id, docId }).unwrap(); } catch { /* ignore */ }
   };
 
   const inputStyle = (field) => ({
@@ -235,12 +249,8 @@ export default function EmployeeForm({ employee, onClose }) {
     ...(errors[field] ? { borderColor: "#D2453F", background: "#FBE6E5" } : {}),
   });
 
-  const isDocTab = tab === 5 && isEdit;
-  const lastFormTabIdx = FORM_TABS.length - 1; // 4
-
   return (
     <>
-      {/* Backdrop */}
       <div style={S.backdrop} onClick={credentials ? undefined : onClose} />
 
       {/* Credentials modal */}
@@ -264,7 +274,6 @@ export default function EmployeeForm({ employee, onClose }) {
 
       {/* Drawer */}
       <div style={S.drawer}>
-        {/* Header */}
         <div style={S.drawerHead}>
           <div>
             <div style={S.drawerTitle}>{isEdit ? "Edit Employee" : "Add New Employee"}</div>
@@ -291,6 +300,9 @@ export default function EmployeeForm({ employee, onClose }) {
               >
                 {hasErr && <span style={{ color: "#D2453F", marginRight: 4 }}>!</span>}
                 {t}
+                {i === 5 && pendingDocs.length > 0 && !isEdit && (
+                  <span style={S.docBadge}>{pendingDocs.length}</span>
+                )}
               </button>
             );
           })}
@@ -385,9 +397,7 @@ export default function EmployeeForm({ employee, onClose }) {
                 <select style={S.input} value={form.site} onChange={set("site")}>
                   <option value="">— Not assigned —</option>
                   {sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}  ({s.district_name})
-                    </option>
+                    <option key={s.id} value={s.id}>{s.name} ({s.district_name})</option>
                   ))}
                 </select>
               </Field>
@@ -427,9 +437,9 @@ export default function EmployeeForm({ employee, onClose }) {
                   placeholder="e.g. ₹500/month · 10% · Exempt – Form 15G filed" maxLength={30} />
               </Field>
               <div style={S.infoBox}>
-                <b>EPF:</b> UAN is the 12-digit Universal Account Number linked to the employee's EPF account. &nbsp;
+                <b>EPF:</b> UAN is the 12-digit Universal Account Number. &nbsp;
                 <b>ESIC:</b> 10-digit insurance number. &nbsp;
-                <b>TDS:</b> Monthly tax deduction amount or declaration reference.
+                <b>TDS:</b> Monthly tax deduction or declaration reference.
               </div>
             </div>
           )}
@@ -456,8 +466,7 @@ export default function EmployeeForm({ employee, onClose }) {
           {tab === 4 && (
             <div style={S.section}>
               <div style={S.salaryNote}>
-                Set the employee's monthly salary components. These are used to calculate payslips.
-                Leave blank if salary is not applicable.
+                Set the employee's monthly salary components. Leave blank if not applicable.
               </div>
               <Field label="Basic Salary (₹) *">
                 <input style={S.input} type="number" min="0" value={salary.basic}
@@ -492,17 +501,23 @@ export default function EmployeeForm({ employee, onClose }) {
               )}
               <div style={S.infoBox}>
                 <b>PF:</b> 12% of gross · <b>ESI:</b> 0.75% of gross (if gross ≤ ₹21,000).
-                Payslips are generated proportionally based on attendance.
               </div>
             </div>
           )}
 
-          {/* ── Tab 5: Documents (edit only) ── */}
-          {tab === 5 && isEdit && (
+          {/* ── Tab 5: Documents ── */}
+          {tab === 5 && (
             <div style={S.section}>
-              {/* Upload card */}
+              {/* Upload / Queue card */}
               <div style={S.docUploadCard}>
-                <div style={S.docCardTitle}>Upload Document</div>
+                <div style={S.docCardTitle}>
+                  {isEdit ? "Upload Document" : "Attach Documents (optional)"}
+                </div>
+                {!isEdit && (
+                  <div style={S.docQueueNote}>
+                    Files added here will be uploaded automatically when you save the employee.
+                  </div>
+                )}
                 <Field label="Document Type">
                   <select style={S.input} value={docType} onChange={(e) => setDocType(e.target.value)}>
                     <option value="aadhar">Aadhar</option>
@@ -522,49 +537,73 @@ export default function EmployeeForm({ employee, onClose }) {
                 </Field>
                 {uploadErr && <div style={S.errMsg}>{uploadErr}</div>}
                 <button
-                  style={{ ...S.uploadBtn, ...(uploading || !docFile ? S.uploadBtnDisabled : {}) }}
-                  onClick={handleUploadDoc}
+                  style={{ ...S.uploadBtn, ...(!docFile ? S.uploadBtnDisabled : {}) }}
+                  onClick={isEdit ? handleUploadDoc : handleQueueDoc}
                   disabled={uploading || !docFile}
                 >
-                  {uploading ? "Uploading…" : "Upload Document"}
+                  {isEdit
+                    ? (uploading ? "Uploading…" : "Upload Document")
+                    : "Add to List"}
                 </button>
               </div>
 
               {/* Document list */}
-              <div style={S.docListHeader}>
-                <span style={S.docListTitle}>Uploaded Documents</span>
-                <span style={S.docCount}>{docs.length} file{docs.length !== 1 ? "s" : ""}</span>
-              </div>
-              {docs.length === 0 ? (
-                <div style={S.docEmpty}>
-                  No documents uploaded yet. Use the form above to upload Aadhar, PAN, or a combined PDF.
-                </div>
-              ) : (
-                docs.map((doc) => (
-                  <div key={doc.id} style={S.docItem}>
-                    <div style={S.docItemLeft}>
-                      <div style={S.docIconWrap}>
-                        {doc.file?.endsWith(".pdf") ? "📄" : "🖼️"}
-                      </div>
-                      <div>
-                        <div style={S.docTypeLabel}>{DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}</div>
-                        <div style={S.docDate}>
-                          {new Date(doc.uploaded_at).toLocaleDateString("en-IN", {
-                            day: "numeric", month: "short", year: "numeric",
-                          })}
+              {isEdit ? (
+                <>
+                  <div style={S.docListHeader}>
+                    <span style={S.docListTitle}>Uploaded Documents</span>
+                    <span style={S.docCount}>{docs.length} file{docs.length !== 1 ? "s" : ""}</span>
+                  </div>
+                  {docs.length === 0 ? (
+                    <div style={S.docEmpty}>No documents uploaded yet.</div>
+                  ) : (
+                    docs.map((doc) => (
+                      <div key={doc.id} style={S.docItem}>
+                        <div style={S.docItemLeft}>
+                          <div style={S.docIconWrap}>{doc.file?.endsWith(".pdf") ? "📄" : "🖼️"}</div>
+                          <div>
+                            <div style={S.docTypeLabel}>{DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}</div>
+                            <div style={S.docDate}>
+                              {new Date(doc.uploaded_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={S.docItemRight}>
+                          <a href={doc.file} target="_blank" rel="noopener noreferrer" style={S.docViewBtn}>View</a>
+                          <button style={S.docDeleteBtn} onClick={() => handleDeleteDoc(doc.id)}>Delete</button>
                         </div>
                       </div>
-                    </div>
-                    <div style={S.docItemRight}>
-                      <a href={doc.file} target="_blank" rel="noopener noreferrer" style={S.docViewBtn}>
-                        View
-                      </a>
-                      <button style={S.docDeleteBtn} onClick={() => handleDeleteDoc(doc.id)}>
-                        Delete
-                      </button>
-                    </div>
+                    ))
+                  )}
+                </>
+              ) : (
+                <>
+                  <div style={S.docListHeader}>
+                    <span style={S.docListTitle}>Queued Documents</span>
+                    <span style={S.docCount}>{pendingDocs.length} file{pendingDocs.length !== 1 ? "s" : ""}</span>
                   </div>
-                ))
+                  {pendingDocs.length === 0 ? (
+                    <div style={S.docEmpty}>No documents queued yet. Add files above.</div>
+                  ) : (
+                    pendingDocs.map((pd, i) => (
+                      <div key={i} style={S.docItem}>
+                        <div style={S.docItemLeft}>
+                          <div style={S.docIconWrap}>{pd.file.name.endsWith(".pdf") ? "📄" : "🖼️"}</div>
+                          <div>
+                            <div style={S.docTypeLabel}>{DOC_TYPE_LABELS[pd.docType]}</div>
+                            <div style={S.docDate}>{pd.file.name}</div>
+                          </div>
+                        </div>
+                        <button
+                          style={S.docDeleteBtn}
+                          onClick={() => setPendingDocs((p) => p.filter((_, j) => j !== i))}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </>
               )}
             </div>
           )}
@@ -584,24 +623,26 @@ export default function EmployeeForm({ employee, onClose }) {
             {tab > 0 && (
               <button style={S.prevBtn} onClick={() => setTab(tab - 1)} disabled={saving}>← Previous</button>
             )}
-            {/* Tabs 0–3: always show Next */}
-            {tab < lastFormTabIdx && (
+            {/* Tabs 0-3: Next */}
+            {tab < LAST_FORM_TAB && (
               <button style={S.nextBtn} onClick={() => setTab(tab + 1)}>Next →</button>
             )}
-            {/* Salary tab (4): show Save, plus "Documents →" if editing */}
-            {tab === lastFormTabIdx && (
+            {/* Salary tab: Save + Documents shortcut */}
+            {tab === LAST_FORM_TAB && (
               <>
                 <button style={S.saveBtn} onClick={handleSubmit} disabled={saving}>
                   {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Employee"}
                 </button>
-                {isEdit && (
-                  <button style={S.nextBtn} onClick={() => setTab(5)}>Documents →</button>
-                )}
+                <button style={S.nextBtn} onClick={() => setTab(5)}>Documents →</button>
               </>
             )}
-            {/* Documents tab: just Done */}
-            {isDocTab && (
-              <button style={S.cancelBtn} onClick={onClose}>Done</button>
+            {/* Documents tab: Done (create mode also shows Save if docs are queued) */}
+            {tab === 5 && (
+              isEdit
+                ? <button style={S.cancelBtn} onClick={onClose}>Done</button>
+                : <button style={S.saveBtn} onClick={handleSubmit} disabled={saving}>
+                    {saving ? "Saving…" : pendingDocs.length > 0 ? `Add Employee + ${pendingDocs.length} Doc${pendingDocs.length > 1 ? "s" : ""}` : "Add Employee"}
+                  </button>
             )}
           </div>
         </div>
@@ -630,19 +671,15 @@ function CredRow({ label, value }) {
 }
 
 const S = {
-  backdrop: {
-    position: "fixed", inset: 0, background: "rgba(15,30,61,.45)", zIndex: 100,
-  },
+  backdrop: { position: "fixed", inset: 0, background: "rgba(15,30,61,.45)", zIndex: 100 },
   drawer: {
     position: "fixed", top: 0, right: 0, bottom: 0, width: 480,
     background: "#fff", zIndex: 101, display: "flex", flexDirection: "column",
-    boxShadow: "-8px 0 40px rgba(15,30,61,.18)",
-    animation: "slideIn .25s ease",
+    boxShadow: "-8px 0 40px rgba(15,30,61,.18)", animation: "slideIn .25s ease",
   },
   drawerHead: {
     padding: "20px 22px", borderBottom: "1px solid #E2E7F0",
-    display: "flex", justifyContent: "space-between", alignItems: "flex-start",
-    flexShrink: 0,
+    display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexShrink: 0,
   },
   drawerTitle: { fontFamily: "Archivo", fontSize: 18, fontWeight: 700, color: "#0F1E3D" },
   drawerSub:   { fontSize: 12.5, color: "#6B7793", marginTop: 3 },
@@ -651,21 +688,22 @@ const S = {
     background: "#fff", cursor: "pointer", fontSize: 14, color: "#6B7793",
     display: "grid", placeItems: "center",
   },
-  tabs: {
-    display: "flex", borderBottom: "1px solid #E2E7F0", flexShrink: 0,
-    overflowX: "auto",
-  },
+  tabs: { display: "flex", borderBottom: "1px solid #E2E7F0", flexShrink: 0, overflowX: "auto" },
   tab: {
-    padding: "12px 14px", border: 0, background: "transparent",
+    padding: "12px 13px", border: 0, background: "transparent",
     fontSize: 12.5, fontWeight: 600, color: "#6B7793", cursor: "pointer",
-    borderBottom: "2px solid transparent", whiteSpace: "nowrap",
+    borderBottom: "2px solid transparent", whiteSpace: "nowrap", position: "relative",
   },
   tabOn:  { color: "#0F1E3D", borderBottomColor: "#E8821E" },
   tabErr: { color: "#D2453F" },
-  body: { flex: 1, overflowY: "auto", padding: "20px 22px" },
+  docBadge: {
+    display: "inline-block", marginLeft: 5, background: "#E8821E", color: "#fff",
+    borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 6px",
+  },
+  body:    { flex: 1, overflowY: "auto", padding: "20px 22px" },
   section: {},
-  row2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-  label: { display: "block", fontSize: 12, fontWeight: 600, color: "#6B7793", marginBottom: 6 },
+  row2:    { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
+  label:   { display: "block", fontSize: 12, fontWeight: 600, color: "#6B7793", marginBottom: 6 },
   input: {
     width: "100%", padding: "10px 12px", border: "1px solid #E2E7F0",
     borderRadius: 9, fontSize: 13.5, fontFamily: "inherit", background: "#fff",
@@ -702,7 +740,6 @@ const S = {
     padding: "9px 20px", borderRadius: 9, border: 0,
     background: "#E8821E", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
   },
-  // Salary tab
   salaryNote: {
     fontSize: 13, color: "#6B7793", background: "#F4F6FA",
     borderRadius: 10, padding: "10px 14px", marginBottom: 16,
@@ -713,22 +750,22 @@ const S = {
   },
   grossLabel: { fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.7)" },
   grossVal:   { fontSize: 18, fontWeight: 800, color: "#fff", fontFamily: "Archivo" },
-  // Password status
   pwdStatusBox: {
     display: "flex", alignItems: "flex-start", gap: 10, marginTop: 14,
-    background: "#F4F6FA", border: "1px solid #E2E7F0", borderRadius: 10,
-    padding: "12px 14px",
+    background: "#F4F6FA", border: "1px solid #E2E7F0", borderRadius: 10, padding: "12px 14px",
   },
   pwdStatusIcon:  { fontSize: 18, flexShrink: 0 },
   pwdStatusTitle: { fontSize: 12.5, fontWeight: 700, color: "#0F1E3D" },
   pwdStatusSub:   { fontSize: 11.5, color: "#6B7793", marginTop: 2 },
-  // Documents tab
+  // Documents
   docUploadCard: {
     background: "#F4F6FA", border: "1px solid #E2E7F0", borderRadius: 12,
     padding: "16px 18px", marginBottom: 20,
   },
-  docCardTitle: {
-    fontSize: 13, fontWeight: 700, color: "#0F1E3D", marginBottom: 14,
+  docCardTitle: { fontSize: 13, fontWeight: 700, color: "#0F1E3D", marginBottom: 10 },
+  docQueueNote: {
+    fontSize: 12, color: "#8a5310", background: "#FCEFDD",
+    border: "1px solid #f2d9b8", borderRadius: 8, padding: "8px 12px", marginBottom: 12,
   },
   fileInput: {
     width: "100%", padding: "8px 0", fontSize: 13, fontFamily: "inherit",
