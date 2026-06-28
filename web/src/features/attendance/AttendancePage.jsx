@@ -3,10 +3,6 @@ import { useSelector } from "react-redux";
 import {
   useGetAttendanceQuery,
   useGetTodaySummaryQuery,
-  useGetPendingReviewsQuery,
-  useApproveAttendanceMutation,
-  useRejectAttendanceMutation,
-  useBulkApproveAttendanceMutation,
   useDeleteSelfiesMutation,
 } from "./attendanceApi";
 
@@ -66,197 +62,21 @@ function SelfieLightbox({ record, onClose }) {
   );
 }
 
-// ── Under Review panel ────────────────────────────────────────
-function ReviewPanel({ onViewSelfie }) {
-  const { data, isLoading, refetch } = useGetPendingReviewsQuery();
-  const [approve]      = useApproveAttendanceMutation();
-  const [reject]       = useRejectAttendanceMutation();
-  const [bulkApprove]  = useBulkApproveAttendanceMutation();
-  const [notes,  setNotes]  = useState({});
-  const [busy,   setBusy]   = useState({});
-  const [result, setResult] = useState({});
-  const [bulkBusy,   setBulkBusy]   = useState(false);
-  const [bulkResult, setBulkResult] = useState(null);
-
-  const records = data?.results || data || [];
-
-  const handleBulkApprove = async () => {
-    if (!window.confirm(`Approve all ${records.length} pending record(s)? This cannot be undone.`)) return;
-    setBulkBusy(true);
-    setBulkResult(null);
-    try {
-      const res = await bulkApprove().unwrap();
-      setBulkResult({ ok: true, msg: `✓ ${res.approved} record(s) approved successfully.` });
-      refetch();
-    } catch (e) {
-      setBulkResult({ ok: false, msg: e?.data?.detail || "Bulk approve failed." });
-    } finally {
-      setBulkBusy(false);
-    }
-  };
-
-  const handleApprove = async (id) => {
-    setBusy((b) => ({ ...b, [id]: true }));
-    setResult((r) => ({ ...r, [id]: null }));
-    try {
-      await approve({ id, note: notes[id] || "" }).unwrap();
-      setResult((r) => ({ ...r, [id]: "approved" }));
-      refetch();
-    } catch (e) {
-      const msg = e?.data?.detail || e?.error || "Approve failed — check your role (admin/hr required).";
-      setResult((r) => ({ ...r, [id]: msg }));
-    } finally {
-      setBusy((b) => ({ ...b, [id]: false }));
-    }
-  };
-
-  const handleReject = async (id) => {
-    setBusy((b) => ({ ...b, [id]: true }));
-    setResult((r) => ({ ...r, [id]: null }));
-    try {
-      await reject({ id, note: notes[id] || "" }).unwrap();
-      setResult((r) => ({ ...r, [id]: "rejected" }));
-      refetch();
-    } catch (e) {
-      const msg = e?.data?.detail || e?.error || "Reject failed — check your role (admin/hr required).";
-      setResult((r) => ({ ...r, [id]: msg }));
-    } finally {
-      setBusy((b) => ({ ...b, [id]: false }));
-    }
-  };
-
-  return (
-    <div>
-      {/* Approve All bar */}
-      {records.length > 0 && (
-        <div style={R.bulkBar}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#0F1E3D" }}>
-            {records.length} record{records.length !== 1 ? "s" : ""} pending review
-          </span>
-          <button
-            style={{ ...R.approveBtn, opacity: bulkBusy ? .6 : 1, fontSize: 14, padding: "9px 22px" }}
-            disabled={bulkBusy}
-            onClick={handleBulkApprove}
-          >
-            {bulkBusy ? "Approving…" : `✓ Approve All (${records.length})`}
-          </button>
-        </div>
-      )}
-      {bulkResult && (
-        <div style={bulkResult.ok ? R.resultOk : R.resultErr}>{bulkResult.msg}</div>
-      )}
-
-      {/* Info banner */}
-      <div style={R.banner}>
-        <span style={R.bannerIcon}>⏱</span>
-        <span>
-          Auto-determine on Approve: check-in <strong>≤ 09:30</strong> → <span style={{ color: "#15966A", fontWeight: 700 }}>Present</span>
-          {" · "}check-in <strong>&gt; 09:30</strong> → <span style={{ color: "#C98A12", fontWeight: 700 }}>Late</span>
-          {" · "}Reject always → <span style={{ color: "#D2453F", fontWeight: 700 }}>Absent</span>
-          <span style={{ color: "#9AA6BF" }}> (threshold set in Django settings: LATE_THRESHOLD)</span>
-        </span>
-      </div>
-
-      {isLoading && <div style={R.empty}>Loading…</div>}
-      {!isLoading && records.length === 0 && (
-        <div style={R.empty}>
-          <div style={R.emptyIcon}>✓</div>
-          No pending reviews — all attendance is resolved.
-        </div>
-      )}
-
-      {records.map((r) => (
-        <div key={r.id} style={R.card}>
-          <div style={R.cardTop}>
-            {/* Employee */}
-            <div style={S.empCell}>
-              <SelfieThumb url={r.selfie_url} size={48} onClick={() => onViewSelfie?.(r)} />
-              <div>
-                <div style={S.empName}>{r.employee_name}</div>
-                <div style={S.empCode}>{r.emp_code}</div>
-              </div>
-            </div>
-
-            {/* Meta */}
-            <div style={R.meta}>
-              <div style={R.metaItem}><span style={R.metaLabel}>Date</span> {r.date}</div>
-              <div style={R.metaItem}>
-                <span style={R.metaLabel}>Check-in</span>
-                <strong style={{ color: r.check_in_time && r.check_in_time > "09:30" ? "#C98A12" : "#0F1E3D" }}>
-                  {r.check_in_time?.slice(0, 5) || "—"}
-                </strong>
-              </div>
-              <div style={R.metaItem}>
-                <span style={R.metaLabel}>Site</span> {r.site_name || "—"}
-              </div>
-              <div style={R.metaItem}>
-                <span style={R.metaLabel}>GPS</span>
-                {r.lat && r.lng
-                  ? <a href={`https://maps.google.com/?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer" style={R.mapLink}>
-                      {parseFloat(r.lat).toFixed(4)}°, {parseFloat(r.lng).toFixed(4)}°
-                    </a>
-                  : "—"}
-              </div>
-              <div style={R.metaItem}>
-                <span style={R.metaLabel}>Geofence</span>
-                <span style={{ color: r.geofence_ok ? "#15966A" : "#D2453F", fontWeight: 600 }}>
-                  {r.geofence_ok ? "✓ Inside" : "✗ Outside"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Result feedback */}
-          {result[r.id] === "approved" && (
-            <div style={R.resultOk}>✓ Approved — status updated to Present or Late based on check-in time.</div>
-          )}
-          {result[r.id] === "rejected" && (
-            <div style={R.resultOk}>✓ Rejected — marked Absent.</div>
-          )}
-          {result[r.id] && result[r.id] !== "approved" && result[r.id] !== "rejected" && (
-            <div style={R.resultErr}>{result[r.id]}</div>
-          )}
-
-          {/* Note + action row */}
-          {!result[r.id] && (
-            <div style={R.actionRow}>
-              <input style={R.noteInput} placeholder="Optional note (reason for override)…"
-                value={notes[r.id] || ""}
-                onChange={(e) => setNotes((n) => ({ ...n, [r.id]: e.target.value }))} />
-              <button style={{ ...R.approveBtn, opacity: busy[r.id] ? .6 : 1 }}
-                disabled={busy[r.id]} onClick={() => handleApprove(r.id)}>
-                {busy[r.id] ? "Working…" : "✓ Approve"}
-              </button>
-              <button style={{ ...R.rejectBtn, opacity: busy[r.id] ? .6 : 1 }}
-                disabled={busy[r.id]} onClick={() => handleReject(r.id)}>
-                {busy[r.id] ? "Working…" : "✕ Reject"}
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ── Main page ─────────────────────────────────────────────────
 export default function AttendancePage() {
-  const [tab,  setTab]  = useState("register");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [lightbox, setLightbox] = useState(null);   // record whose selfie is open
-  const [selected, setSelected] = useState([]);      // selected attendance ids (for selfie delete)
-  const [selfieMsg, setSelfieMsg] = useState(null);  // { ok, msg }
+  const [lightbox, setLightbox] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [selfieMsg, setSelfieMsg] = useState(null);
 
   const role    = useSelector((s) => s.auth.user?.role);
   const isAdmin = role === "admin";
 
-  const { data: summary }              = useGetTodaySummaryQuery();
-  const { data: reviewData }           = useGetPendingReviewsQuery();
-  const { data, isLoading }            = useGetAttendanceQuery({ date });
+  const { data: summary }   = useGetTodaySummaryQuery();
+  const { data, isLoading } = useGetAttendanceQuery({ date });
   const [deleteSelfies, { isLoading: deletingSelfies }] = useDeleteSelfiesMutation();
 
-  const records       = data?.results || [];
-  const reviewCount   = (reviewData?.results || reviewData || []).length;
+  const records = data?.results || [];
 
   const selfieIds    = records.filter((r) => r.selfie_url).map((r) => r.id);
   const selfieCount  = selfieIds.length;
@@ -300,10 +120,9 @@ export default function AttendancePage() {
   const colCount = isAdmin ? 9 : 8;
 
   const kpis = [
-    { label: "Present Today",  value: summary?.present      ?? "—" },
-    { label: "Total Active",   value: summary?.total_active ?? "—" },
-    { label: "Absent",         value: summary?.absent       ?? "—" },
-    { label: "Under Review",   value: summary?.under_review ?? "—", alert: (summary?.under_review ?? 0) > 0 },
+    { label: "Present Today", value: summary?.present      ?? "—" },
+    { label: "Total Active",  value: summary?.total_active ?? "—" },
+    { label: "Absent",        value: summary?.absent       ?? "—" },
   ];
 
   return (
@@ -313,44 +132,24 @@ export default function AttendancePage() {
           <h1 style={S.h1}>Attendance – GPS + Selfie Verified</h1>
           <p style={S.sub}>Every check-in is geo-tagged and face-verified</p>
         </div>
-        {tab === "register" && (
-          <div style={S.actions}>
-            <input type="date" style={S.datePicker} value={date}
-              onChange={(e) => changeDate(e.target.value)} />
-          </div>
-        )}
+        <div style={S.actions}>
+          <input type="date" style={S.datePicker} value={date}
+            onChange={(e) => changeDate(e.target.value)} />
+        </div>
       </div>
 
       {/* KPI strip */}
       <div style={S.kpiGrid}>
         {kpis.map((k) => (
-          <div key={k.label}
-            style={{ ...S.kpi, borderColor: k.alert ? "#E8821E" : "#E2E7F0", cursor: k.alert ? "pointer" : "default" }}
-            onClick={k.alert ? () => setTab("review") : undefined}
-            title={k.alert ? "Click to see pending reviews" : undefined}
-            role={k.alert ? "button" : undefined}>
+          <div key={k.label} style={S.kpi}>
             <div style={S.kpiLabel}>{k.label}</div>
-            <div style={{ ...S.kpiVal, color: k.alert ? "#E8821E" : "#0F1E3D" }}>{k.value}</div>
+            <div style={S.kpiVal}>{k.value}</div>
           </div>
         ))}
       </div>
 
-      {/* Tabs */}
-      <div style={S.tabBar}>
-        {[
-          { key: "register", label: "Daily Register" },
-          { key: "review",   label: `Under Review${reviewCount > 0 ? ` (${reviewCount})` : ""}`, badge: reviewCount > 0 },
-        ].map(({ key, label, badge }) => (
-          <button key={key} style={{ ...S.tab, ...(tab === key ? S.tabActive : {}), ...(badge ? S.tabBadge : {}) }}
-            onClick={() => setTab(key)}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Tab: Daily Register ── */}
-      {tab === "register" && (
-        <div style={S.card}>
+      {/* Daily Register */}
+      <div style={S.card}>
           <div style={S.cardH}>
             <h3 style={S.cardTitle}>Attendance Register – {date}</h3>
           </div>
@@ -461,12 +260,8 @@ export default function AttendancePage() {
             </tbody>
           </table>
         </div>
-      )}
 
-      {/* ── Tab: Under Review ── */}
-      {tab === "review" && <ReviewPanel onViewSelfie={setLightbox} />}
-
-      {/* Selfie lightbox (shared by both tabs) */}
+      {/* Selfie lightbox */}
       <SelfieLightbox record={lightbox} onClose={() => setLightbox(null)} />
     </div>
   );
@@ -479,14 +274,10 @@ const S = {
   sub:        { fontSize: 13, color: "#6B7793", marginTop: 3 },
   actions:    { display: "flex", gap: 9 },
   datePicker: { padding: "9px 12px", border: "1px solid #E2E7F0", borderRadius: 9, fontSize: 13, fontFamily: "inherit" },
-  kpiGrid:    { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 16 },
+  kpiGrid:    { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 16 },
   kpi:        { background: "#fff", border: "1px solid #E2E7F0", borderRadius: 14, padding: 16 },
   kpiLabel:   { fontSize: 12, color: "#6B7793", fontWeight: 600 },
   kpiVal:     { fontFamily: "Archivo", fontSize: 27, fontWeight: 800, color: "#0F1E3D", marginTop: 6 },
-  tabBar:     { display: "flex", gap: 4, marginBottom: 14, borderBottom: "2px solid #E2E7F0", paddingBottom: 0 },
-  tab:        { padding: "9px 18px", border: 0, borderBottom: "2px solid transparent", background: "none", fontSize: 13.5, fontWeight: 600, color: "#6B7793", cursor: "pointer", marginBottom: -2 },
-  tabActive:  { color: "#1E3563", borderBottomColor: "#1E3563" },
-  tabBadge:   { color: "#E8821E" },
   card:       { background: "#fff", border: "1px solid #E2E7F0", borderRadius: 14, overflow: "auto" },
   cardH:      { padding: "15px 18px", borderBottom: "1px solid #E2E7F0" },
   cardTitle:  { fontSize: 14.5, fontWeight: 700, color: "#0F1E3D" },
@@ -498,6 +289,11 @@ const S = {
   empName:    { fontWeight: 600, color: "#0F1E3D" },
   empCode:    { fontSize: 11, color: "#6B7793" },
   pill:       { display: "inline-flex", padding: "4px 10px", borderRadius: 30, fontSize: 11.5, fontWeight: 600 },
+};
+
+const R = {
+  resultOk:  { padding: "8px 12px", background: "#E1F4EC", color: "#15966A", borderRadius: 8, fontSize: 13, fontWeight: 600 },
+  resultErr: { padding: "8px 12px", background: "#FDECEA", color: "#D2453F", borderRadius: 8, fontSize: 13, fontWeight: 600 },
 };
 
 const DEL = {
@@ -551,22 +347,3 @@ const PHOTO = {
   infoMeta: { display: "flex", flexWrap: "wrap", gap: "6px 18px", fontSize: 12.5, color: "#6B7793" },
 };
 
-const R = {
-  bulkBar:    { display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", border: "1px solid #E2E7F0", borderRadius: 10, padding: "12px 16px", marginBottom: 12, flexWrap: "wrap", gap: 10 },
-  banner:     { display: "flex", alignItems: "flex-start", gap: 10, background: "#FFFBE6", border: "1px solid #F5D78E", borderRadius: 10, padding: "11px 14px", marginBottom: 16, fontSize: 13, color: "#5A4000", lineHeight: 1.6 },
-  bannerIcon: { fontSize: 18, flexShrink: 0, marginTop: 1 },
-  empty:      { textAlign: "center", padding: "60px 20px", color: "#9AA6BF", fontSize: 15 },
-  emptyIcon:  { fontSize: 40, marginBottom: 10, color: "#15966A" },
-  card:       { background: "#fff", border: "1px solid #E2E7F0", borderRadius: 12, padding: 16, marginBottom: 10 },
-  cardTop:    { display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 12 },
-  meta:       { display: "flex", flexWrap: "wrap", gap: "6px 20px", flex: 1 },
-  metaItem:   { display: "flex", flexDirection: "column", minWidth: 90 },
-  metaLabel:  { fontSize: 10.5, color: "#9AA6BF", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 },
-  mapLink:    { color: "#1E3563", fontSize: 12, fontWeight: 600 },
-  actionRow:  { display: "flex", gap: 8, alignItems: "center", paddingTop: 10, borderTop: "1px solid #F0F2F8" },
-  noteInput:  { flex: 1, padding: "7px 11px", border: "1px solid #E2E7F0", borderRadius: 8, fontSize: 12, fontFamily: "inherit" },
-  approveBtn: { padding: "7px 16px", border: 0, borderRadius: 8, background: "#15966A", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 },
-  rejectBtn:  { padding: "7px 16px", border: 0, borderRadius: 8, background: "#D2453F", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 },
-  resultOk:   { padding: "8px 12px", background: "#E1F4EC", color: "#15966A", borderRadius: 8, fontSize: 13, fontWeight: 600, marginTop: 8 },
-  resultErr:  { padding: "8px 12px", background: "#FDECEA", color: "#D2453F", borderRadius: 8, fontSize: 13, fontWeight: 600, marginTop: 8 },
-};
