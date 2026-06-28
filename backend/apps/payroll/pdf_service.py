@@ -249,39 +249,72 @@ def generate_payslip_pdf(payslip):
     basic   = float(payslip.basic)
     hra     = float(payslip.hra)
     da      = float(payslip.da)
-    other_a = float(payslip.other_allowances)
-    bonus   = float(payslip.bonus)
-    gross   = basic + hra + da + other_a + bonus
-
+    bonus   = float(payslip.bonus)   # 8.33% of struct.basic (PF regime) or 0 (TDS regime)
     pf_emp  = float(payslip.pf_employee)
     esi_emp = float(payslip.esi_employee)
     tds_amt = float(payslip.tds)
     other_d = float(payslip.other_deductions)
-    total_d = pf_emp + esi_emp + tds_amt + other_d
     net     = float(payslip.net_pay)
 
-    high_salary = basic >= 30000
+    # Employer contributions (for CTC display, not saved in DB)
+    pf_er  = round(basic * 0.12,   2)
+    esi_er = round(basic * 0.0325, 2)
 
-    earn_rows = [
-        ("Basic Salary",         _inr(basic)),
-        ("House Rent Allowance", _inr(hra)),
-        ("Dearness Allowance",   _inr(da)),
-        ("Other Allowances",     _inr(other_a)),
-        ("Bonus",                _inr(bonus)),
-    ]
-    if high_salary:
-        ded_rows = [
-            ("TDS (Income Tax @ 10%)", _inr(tds_amt)),
-            ("Other Deductions",       _inr(other_d)),
-            ("", ""), ("", ""), ("", ""),
+    # Regime: bonus > 0 means PF/ESIC mode; bonus == 0 means TDS mode
+    pf_mode = bonus > 0
+
+    if pf_mode:
+        # CTC Gross = Basic + HRA + DA + Bonus + Employer PF + Employer ESIC
+        gross_ctc = basic + hra + da + bonus + pf_er + esi_er
+        # Gross Deduction = all 4 PF/ESIC contributions
+        total_d   = pf_emp + pf_er + esi_emp + esi_er + other_d
+
+        earn_rows = [
+            ("Basic Salary",                _inr(basic)),
+            ("House Rent Allowance",        _inr(hra)),
         ]
-    else:
+        if da > 0:
+            earn_rows.append(("Dearness Allowance", _inr(da)))
+        earn_rows.append(("Other  (Bonus @ 8.33% of Basic)", _inr(bonus)))
+
         ded_rows = [
-            ("PF – Employee (12% of Basic)",     _inr(pf_emp)),
+            ("EPF – Employee (12% of Basic)",    _inr(pf_emp)),
+            ("EPF – Employer (12% of Basic)",    _inr(pf_er)),
             ("ESIC – Employee (0.75% of Basic)", _inr(esi_emp)),
-            ("Other Deductions",                 _inr(other_d)),
-            ("", ""), ("", ""),
+            ("ESIC – Employer (3.25% of Basic)", _inr(esi_er)),
         ]
+        if other_d:
+            ded_rows.append(("Other Deductions", _inr(other_d)))
+
+        gross_label = "Gross Earning (CTC)"
+        ded_label   = "Gross Deduction"
+        regime_txt  = "Salary Regime: EPF & ESIC applicable (Basic ≤ ₹30,000) — TDS not deducted."
+        regime_clr  = colors.HexColor("#1565C0")
+    else:
+        # TDS mode: standard employee gross (no employer contributions, no bonus)
+        gross_ctc = basic + hra + da
+        total_d   = tds_amt + other_d
+
+        earn_rows = [
+            ("Basic Salary",         _inr(basic)),
+            ("House Rent Allowance", _inr(hra)),
+        ]
+        if da > 0:
+            earn_rows.append(("Dearness Allowance", _inr(da)))
+
+        ded_rows = [("TDS – Income Tax (10% of Basic)", _inr(tds_amt))]
+        if other_d:
+            ded_rows.append(("Other Deductions", _inr(other_d)))
+
+        gross_label = "Gross Earnings"
+        ded_label   = "Total Deductions"
+        regime_txt  = "Salary Regime: TDS applicable (Basic > ₹30,000) — EPF & ESIC not deducted."
+        regime_clr  = PURPLE
+
+    # Pad both sides to equal row count so the tables align
+    max_rows = max(len(earn_rows), len(ded_rows))
+    while len(earn_rows) < max_rows: earn_rows.append(("", ""))
+    while len(ded_rows)  < max_rows: ded_rows.append(("", ""))
 
     cw = (W - 2 * MARGIN) / 2 - 3
 
@@ -290,7 +323,7 @@ def generate_payslip_pdf(payslip):
         data += [[Paragraph(l, nrm), Paragraph(v, vr)] for l, v in rows]
         data += [[Paragraph(f"<b>{total_label}</b>", bld),
                   Paragraph(f"<b>{total_val}</b>", total_style)]]
-        t = Table(data, colWidths=[cw * 0.62, cw * 0.38])
+        t = Table(data, colWidths=[cw * 0.63, cw * 0.37])
         t.setStyle(TableStyle([
             ("BACKGROUND",    (0, 0), (-1, 0),  hdr_color),
             ("TOPPADDING",    (0, 0), (-1, -1), 5),
@@ -304,8 +337,8 @@ def generate_payslip_pdf(payslip):
         ]))
         return t
 
-    earn_tbl = _salary_tbl(earn_rows, "Gross Earnings",   _inr(gross), vrg, NAVY)
-    ded_tbl  = _salary_tbl(ded_rows,  "Total Deductions", _inr(total_d), vrr, PURPLE)
+    earn_tbl = _salary_tbl(earn_rows, gross_label, _inr(gross_ctc), vrg, NAVY)
+    ded_tbl  = _salary_tbl(ded_rows,  ded_label,   _inr(total_d),   vrr, PURPLE)
 
     cols = Table([[earn_tbl, Spacer(6, 1), ded_tbl]], colWidths=[cw, 6, cw])
     cols.setStyle(TableStyle([("TOPPADDING",    (0, 0), (-1, -1), 0),
@@ -338,13 +371,6 @@ def generate_payslip_pdf(payslip):
         _s("words", size=8.5, color=MID, leading=12),
     ))
     story.append(Spacer(1, 5))
-
-    if high_salary:
-        regime_txt = "Salary Regime: TDS applicable (Basic ≥ ₹30,000) — PF & ESIC not deducted."
-        regime_clr = PURPLE
-    else:
-        regime_txt = "Salary Regime: PF & ESIC applicable (Basic < ₹30,000) — TDS not deducted."
-        regime_clr = colors.HexColor("#1565C0")
     story.append(Paragraph(regime_txt, _s("regime", size=8, color=regime_clr, leading=11)))
     story.append(Spacer(1, 10))
 

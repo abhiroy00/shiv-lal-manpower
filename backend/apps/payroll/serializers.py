@@ -95,7 +95,12 @@ class PayslipSerializer(serializers.ModelSerializer):
     esi_employer = serializers.SerializerMethodField()
 
     def get_gross_pay(self, obj):
-        return float(obj.basic + obj.hra + obj.da + obj.other_allowances)
+        # CTC in PF/ESIC mode; employee gross in TDS mode
+        from decimal import Decimal
+        base = obj.basic + obj.hra + obj.da + obj.other_allowances + obj.bonus
+        if obj.bonus > 0:  # PF/ESIC regime
+            base += (obj.basic * Decimal("0.12") + obj.basic * Decimal("0.0325")).quantize(Decimal("0.01"))
+        return float(base)
 
     def get_pf_employer(self, obj):
         from decimal import Decimal

@@ -4,18 +4,18 @@ from apps.attendance.models import Attendance
 from apps.employees.models import Employee
 from .models import SalaryStructure, PayrollRun, Payslip
 
-PF_THRESHOLD  = Decimal("30000")   # basic >= this → TDS only, NO PF/ESIC
-PF_RATE       = Decimal("0.12")    # 12% of basic (employee PF)
-ESI_RATE      = Decimal("0.0075")  # 0.75% of basic (employee ESIC)
-TDS_RATE      = Decimal("0.10")    # 10% of gross (applied when basic >= 30k)
-BONUS_RATE    = Decimal("0.0833")  # 8.33% statutory bonus
-PF_EMPLOYER   = Decimal("0.12")    # employer PF  (for reference / future reporting)
-ESI_EMPLOYER  = Decimal("0.0325")  # employer ESI (for reference / future reporting)
+PF_THRESHOLD = Decimal("30000")   # basic STRICTLY > this → TDS only, no PF/ESIC
+PF_RATE      = Decimal("0.12")    # 12% of basic_pay  (employee EPF)
+PF_ER_RATE   = Decimal("0.12")    # 12% of basic_pay  (employer EPF — for CTC display)
+ESI_RATE     = Decimal("0.0075")  # 0.75% of basic_pay (employee ESIC)
+ESI_ER_RATE  = Decimal("0.0325")  # 3.25% of basic_pay (employer ESIC — for CTC display)
+TDS_RATE     = Decimal("0.10")    # 10% of basic_pay   (when basic > 30k)
+BONUS_RATE   = Decimal("0.0833")  # 8.33% of full struct.basic (PF/ESIC regime only)
 
 
 def _working_days(month, year):
     """Total days in month minus Sundays."""
-    total = calendar.monthrange(year, month)[1]
+    total   = calendar.monthrange(year, month)[1]
     sundays = sum(1 for d in range(1, total + 1) if calendar.weekday(year, month, d) == 6)
     return total - sundays
 
@@ -26,7 +26,7 @@ def run_payroll(month, year, user):
     )
 
     working_days = _working_days(month, year)
-    employees = Employee.objects.filter(status="active").select_related("salary_structure")
+    employees    = Employee.objects.filter(status="active").select_related("salary_structure")
 
     created = updated = skipped = 0
     for emp in employees:
@@ -48,22 +48,24 @@ def run_payroll(month, year, user):
         hra_pay   = (struct.hra              * ratio).quantize(Decimal("0.01"))
         da_pay    = (struct.da               * ratio).quantize(Decimal("0.01"))
         other_pay = (struct.other_allowances * ratio).quantize(Decimal("0.01"))
-        bonus     = (basic_pay * BONUS_RATE).quantize(Decimal("0.01"))
-        gross     = basic_pay + hra_pay + da_pay + other_pay
 
-        # ── Deduction logic ──────────────────────────────────────
-        # Rule: basic >= ₹30,000 → TDS only (no PF, no ESIC)
-        #       basic <  ₹30,000 → PF + ESIC (no TDS)
-        if struct.basic >= PF_THRESHOLD:
-            pf  = Decimal("0.00")
-            esi = Decimal("0.00")
-            tds = (gross * TDS_RATE).quantize(Decimal("0.01"))
+        # ── Regime (strictly greater, per spec) ───────────────
+        if struct.basic > PF_THRESHOLD:
+            # TDS regime: statutory bonus not applicable above ₹21,000 salary
+            pf    = Decimal("0.00")
+            esi   = Decimal("0.00")
+            bonus = Decimal("0.00")
+            tds   = (basic_pay * TDS_RATE).quantize(Decimal("0.01"))  # 10% of basic
         else:
-            pf  = (basic_pay * PF_RATE).quantize(Decimal("0.01"))
-            esi = (basic_pay * ESI_RATE).quantize(Decimal("0.01"))
-            tds = Decimal("0.00")
+            # PF + ESIC regime: bonus on full struct.basic (not prorated)
+            bonus = (struct.basic * BONUS_RATE).quantize(Decimal("0.01"))
+            pf    = (basic_pay   * PF_RATE).quantize(Decimal("0.01"))
+            esi   = (basic_pay   * ESI_RATE).quantize(Decimal("0.01"))
+            tds   = Decimal("0.00")
 
-        net = (gross + bonus - pf - esi - tds).quantize(Decimal("0.01"))
+        # Net = employee earnings − employee deductions only.
+        # Bonus is accrued (shown in CTC gross) but not paid out monthly.
+        net = (basic_pay + hra_pay + da_pay + other_pay - pf - esi - tds).quantize(Decimal("0.01"))
 
         _, was_created = Payslip.objects.update_or_create(
             payroll_run=run,
