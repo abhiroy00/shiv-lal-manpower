@@ -52,6 +52,18 @@ export const employeesApi = baseApi.injectEndpoints({
       query: (formData) => ({ url: "/employees/import/", method: "POST", body: formData }),
       invalidatesTags: ["Employee"],
     }),
+    getMyDocuments: build.query({
+      query: () => "/employees/my-documents/",
+      providesTags: ["MyDocuments"],
+    }),
+    uploadMyDocument: build.mutation({
+      query: (formData) => ({ url: "/employees/my-documents/", method: "POST", body: formData }),
+      invalidatesTags: ["MyDocuments"],
+    }),
+    deleteMyDocument: build.mutation({
+      query: (docId) => ({ url: `/employees/my-documents/${docId}/`, method: "DELETE" }),
+      invalidatesTags: ["MyDocuments"],
+    }),
   }),
 });
 
@@ -67,4 +79,7 @@ export const {
   useUploadEmployeeDocumentMutation,
   useDeleteEmployeeDocumentMutation,
   useImportEmployeesMutation,
+  useGetMyDocumentsQuery,
+  useUploadMyDocumentMutation,
+  useDeleteMyDocumentMutation,
 } = employeesApi;

@@ -639,3 +639,31 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         doc = get_object_or_404(EmployeeDocument, pk=doc_id, employee=employee)
         doc.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["get", "post"], url_path="my-documents")
+    def my_documents(self, request):
+        """Employee self-service: list or upload own documents."""
+        if not request.user.employee_id:
+            return Response({"detail": "No employee profile linked to this account."}, status=400)
+        employee = request.user.employee
+        ctx = {"request": request}
+        if request.method == "POST":
+            f = request.FILES.get("file")
+            if f and f.size > 25 * 1024 * 1024:
+                return Response({"detail": "File too large. Maximum size is 25 MB."}, status=400)
+            serializer = EmployeeDocumentSerializer(data=request.data, context=ctx)
+            serializer.is_valid(raise_exception=True)
+            serializer.save(employee=employee)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        docs = employee.documents.all().order_by("-uploaded_at")
+        return Response(EmployeeDocumentSerializer(docs, many=True, context=ctx).data)
+
+    @action(detail=False, methods=["delete"], url_path=r"my-documents/(?P<doc_id>[^/.]+)")
+    def delete_my_document(self, request, doc_id=None):
+        """Employee self-service: delete own document."""
+        if not request.user.employee_id:
+            return Response({"detail": "No employee profile linked to this account."}, status=400)
+        employee = request.user.employee
+        doc = get_object_or_404(EmployeeDocument, pk=doc_id, employee=employee)
+        doc.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
