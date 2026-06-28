@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, ScrollView,
+  Alert, ActivityIndicator, ScrollView, Platform,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
@@ -113,7 +113,14 @@ export default function CheckInScreen() {
       const form = new FormData();
       form.append("lat", String(lat));
       form.append("lng", String(lng));
-      form.append("selfie", { uri: selfieUri, name: "selfie.jpg", type: "image/jpeg" });
+      if (Platform.OS === "web") {
+        // On web the {uri,name,type} object isn't a real file — convert the
+        // blob/data URI to an actual Blob so the backend receives the image.
+        const blob = await (await fetch(selfieUri)).blob();
+        form.append("selfie", blob, "selfie.jpg");
+      } else {
+        form.append("selfie", { uri: selfieUri, name: "selfie.jpg", type: "image/jpeg" });
+      }
 
       const res  = await fetch(`${API_URL}/attendance/check-in/`, {
         method: "POST",
