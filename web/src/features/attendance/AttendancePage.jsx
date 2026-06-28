@@ -15,8 +15,57 @@ const STATUS_COLORS = {
   absent:  { bg: "#FBE6E5", color: "#D2453F" },
 };
 
+// ── Selfie thumbnail ──────────────────────────────────────────
+function SelfieThumb({ url, onClick, size = 40 }) {
+  if (!url) {
+    return (
+      <div style={{ ...PHOTO.placeholder, width: size, height: size }} title="No selfie captured">
+        <span style={{ fontSize: size * 0.4 }}>👤</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt="Check-in selfie"
+      onClick={onClick}
+      title="Click to enlarge"
+      style={{ ...PHOTO.thumb, width: size, height: size }}
+    />
+  );
+}
+
+// ── Full-image lightbox ───────────────────────────────────────
+function SelfieLightbox({ record, onClose }) {
+  if (!record) return null;
+  return (
+    <div style={PHOTO.backdrop} onClick={onClose}>
+      <div style={PHOTO.box} onClick={(e) => e.stopPropagation()}>
+        <button style={PHOTO.close} onClick={onClose}>✕</button>
+        {record.selfie_url ? (
+          <img src={record.selfie_url} alt="Check-in selfie" style={PHOTO.fullImg} />
+        ) : (
+          <div style={PHOTO.noImg}>👤<div style={{ fontSize: 14, marginTop: 8 }}>No selfie captured</div></div>
+        )}
+        <div style={PHOTO.info}>
+          <div style={PHOTO.infoName}>
+            {record.employee_name}
+            <span style={{ color: "#9AA6BF", fontWeight: 500 }}> · {record.emp_code}</span>
+          </div>
+          <div style={PHOTO.infoMeta}>
+            <span><b>Date</b> {record.date}</span>
+            <span><b>Check-in</b> {record.check_in_time?.slice(0, 5) || "—"}</span>
+            <span><b>Check-out</b> {record.check_out_time?.slice(0, 5) || "—"}</span>
+            <span><b>Geofence</b> {record.geofence_ok ? "✓ Inside" : "✗ Outside"}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Under Review panel ────────────────────────────────────────
-function ReviewPanel() {
+function ReviewPanel({ onViewSelfie }) {
   const { data, isLoading, refetch } = useGetPendingReviewsQuery();
   const [approve]      = useApproveAttendanceMutation();
   const [reject]       = useRejectAttendanceMutation();
@@ -119,7 +168,7 @@ function ReviewPanel() {
           <div style={R.cardTop}>
             {/* Employee */}
             <div style={S.empCell}>
-              <div style={S.av}>{r.employee_name?.slice(0, 2).toUpperCase()}</div>
+              <SelfieThumb url={r.selfie_url} size={48} onClick={() => onViewSelfie?.(r)} />
               <div>
                 <div style={S.empName}>{r.employee_name}</div>
                 <div style={S.empCode}>{r.emp_code}</div>
@@ -192,6 +241,7 @@ function ReviewPanel() {
 export default function AttendancePage() {
   const [tab,  setTab]  = useState("register");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [lightbox, setLightbox] = useState(null);   // record whose selfie is open
 
   const { data: summary }              = useGetTodaySummaryQuery();
   const { data: reviewData }           = useGetPendingReviewsQuery();
@@ -258,14 +308,14 @@ export default function AttendancePage() {
           <table style={S.table}>
             <thead>
               <tr>
-                {["Employee", "Site", "Check-in", "Check-out", "GPS", "Geofence", "Status"].map((h) => (
+                {["Employee", "Selfie", "Site", "Check-in", "Check-out", "GPS", "Geofence", "Status"].map((h) => (
                   <th key={h} style={S.th}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={7} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>Loading…</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>Loading…</td></tr>
               )}
               {records.map((r) => {
                 const sc = STATUS_COLORS[r.status] || STATUS_COLORS.absent;
@@ -279,6 +329,9 @@ export default function AttendancePage() {
                           <div style={S.empCode}>{r.emp_code}</div>
                         </div>
                       </div>
+                    </td>
+                    <td style={S.td}>
+                      <SelfieThumb url={r.selfie_url} onClick={() => setLightbox(r)} />
                     </td>
                     <td style={S.td}>{r.site_name || "—"}</td>
                     <td style={S.td}>{r.check_in_time?.slice(0, 5) || "—"}</td>
@@ -304,7 +357,7 @@ export default function AttendancePage() {
                 );
               })}
               {!isLoading && records.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>No records for {date}</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>No records for {date}</td></tr>
               )}
             </tbody>
           </table>
@@ -312,7 +365,10 @@ export default function AttendancePage() {
       )}
 
       {/* ── Tab: Under Review ── */}
-      {tab === "review" && <ReviewPanel />}
+      {tab === "review" && <ReviewPanel onViewSelfie={setLightbox} />}
+
+      {/* Selfie lightbox (shared by both tabs) */}
+      <SelfieLightbox record={lightbox} onClose={() => setLightbox(null)} />
     </div>
   );
 }
@@ -343,6 +399,38 @@ const S = {
   empName:    { fontWeight: 600, color: "#0F1E3D" },
   empCode:    { fontSize: 11, color: "#6B7793" },
   pill:       { display: "inline-flex", padding: "4px 10px", borderRadius: 30, fontSize: 11.5, fontWeight: 600 },
+};
+
+const PHOTO = {
+  thumb: {
+    borderRadius: 8, objectFit: "cover", cursor: "pointer",
+    border: "1px solid #E2E7F0", background: "#F4F6FA", display: "block",
+  },
+  placeholder: {
+    borderRadius: 8, border: "1px dashed #D0D7E5", background: "#F4F6FA",
+    display: "grid", placeItems: "center", color: "#9AA6BF",
+  },
+  backdrop: {
+    position: "fixed", inset: 0, background: "rgba(15,30,61,.72)", zIndex: 300,
+    display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+  },
+  box: {
+    background: "#fff", borderRadius: 16, overflow: "hidden", position: "relative",
+    maxWidth: 460, width: "100%", boxShadow: "0 24px 70px rgba(15,30,61,.4)",
+  },
+  close: {
+    position: "absolute", top: 12, right: 12, width: 34, height: 34, borderRadius: "50%",
+    border: 0, background: "rgba(0,0,0,.45)", color: "#fff", fontSize: 16, cursor: "pointer",
+    display: "grid", placeItems: "center", zIndex: 2,
+  },
+  fullImg: { width: "100%", maxHeight: "70vh", objectFit: "contain", display: "block", background: "#0F1E3D" },
+  noImg: {
+    width: "100%", height: 300, display: "grid", placeItems: "center",
+    fontSize: 64, color: "#C4CCDA", background: "#F4F6FA", textAlign: "center",
+  },
+  info: { padding: "14px 18px", borderTop: "1px solid #E2E7F0" },
+  infoName: { fontSize: 15, fontWeight: 700, color: "#0F1E3D", marginBottom: 8 },
+  infoMeta: { display: "flex", flexWrap: "wrap", gap: "6px 18px", fontSize: 12.5, color: "#6B7793" },
 };
 
 const R = {
