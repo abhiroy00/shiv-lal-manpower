@@ -1,5 +1,7 @@
 import { Navigate } from "react-router-dom";
 import LoginPage from "../features/auth/LoginPage";
+import ForgotPasswordPage from "../features/auth/ForgotPasswordPage";
+import ResetPasswordPage from "../features/auth/ResetPasswordPage";
 import DashboardLayout from "../layouts/DashboardLayout";
 import EmployeeLayout from "../layouts/EmployeeLayout";
 import ProtectedRoute from "./ProtectedRoute";
@@ -20,7 +22,9 @@ import EmployeeAttendancePage from "../features/employee/EmployeeAttendancePage"
 import EmployeeDocumentsPage  from "../features/employee/EmployeeDocumentsPage";
 
 const AppRoutes = [
-  { path: "/login", element: <LoginPage /> },
+  { path: "/login",           element: <LoginPage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password",  element: <ResetPasswordPage /> },
 
   // Admin / HR portal
   {

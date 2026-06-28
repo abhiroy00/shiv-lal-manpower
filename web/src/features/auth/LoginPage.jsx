@@ -79,6 +79,11 @@ export default function LoginPage() {
             {isLoading ? "Signing in…" : "Sign in →"}
           </button>
         </form>
+        <div style={styles.forgotWrap}>
+          <button style={styles.forgotBtn} onClick={() => navigate("/forgot-password")}>
+            Forgot password?
+          </button>
+        </div>
         <div style={styles.foot}>Shiv Lal Manpower Portal · Secure Login</div>
       </div>
     </div>
@@ -103,6 +108,8 @@ const styles = {
   input: { width: "100%", padding: "11px 13px", border: "1px solid #E2E7F0", borderRadius: 10, fontSize: 14, fontFamily: "inherit" },
   err: { color: "#D2453F", fontSize: 12.5, marginTop: 8 },
   submit: { width: "100%", marginTop: 16, padding: 13, border: 0, borderRadius: 10, background: "#E8821E", color: "#fff", fontWeight: 700, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" },
+  forgotWrap: { textAlign: "right", marginTop: 8 },
+  forgotBtn: { background: "transparent", border: 0, color: "#1E3563", fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0, fontFamily: "inherit" },
   foot: { marginTop: 18, fontSize: 12, color: "#9AA6BF", textAlign: "center" },
   logoCircle: { width: 160, height: 160, borderRadius: "50%", overflow: "hidden", marginBottom: 20, border: "3px solid #D4AF37", boxShadow: "0 0 0 6px rgba(212,175,55,0.2)", backgroundColor: "#B71C1C" },
   logoImg: { width: "100%", height: "100%", objectFit: "contain" },

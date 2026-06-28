@@ -9,7 +9,18 @@ export const authApi = baseApi.injectEndpoints({
       query: () => "/auth/me/",
       providesTags: ["User"],
     }),
+    requestPasswordReset: build.mutation({
+      query: (body) => ({ url: "/auth/password-reset/", method: "POST", body }),
+    }),
+    confirmPasswordReset: build.mutation({
+      query: (body) => ({ url: "/auth/password-reset/confirm/", method: "POST", body }),
+    }),
   }),
 });
 
-export const { useLoginMutation, useGetMeQuery } = authApi;
+export const {
+  useLoginMutation,
+  useGetMeQuery,
+  useRequestPasswordResetMutation,
+  useConfirmPasswordResetMutation,
+} = authApi;
