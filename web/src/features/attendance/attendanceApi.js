@@ -38,6 +38,14 @@ export const attendanceApi = baseApi.injectEndpoints({
       query: (body) => ({ url: "/attendance/bulk-fill/", method: "POST", body }),
       invalidatesTags: ["Attendance"],
     }),
+    deleteSelfies: build.mutation({
+      query: (body) => ({ url: "/attendance/delete-selfies/", method: "POST", body }),
+      invalidatesTags: ["Attendance", "AttendanceReview"],
+    }),
+    deleteSelfie: build.mutation({
+      query: (id) => ({ url: `/attendance/${id}/selfie/`, method: "DELETE" }),
+      invalidatesTags: ["Attendance", "AttendanceReview"],
+    }),
   }),
 });
 
@@ -51,4 +59,6 @@ export const {
   useRejectAttendanceMutation,
   useBulkApproveAttendanceMutation,
   useBulkFillAttendanceMutation,
+  useDeleteSelfiesMutation,
+  useDeleteSelfieMutation,
 } = attendanceApi;

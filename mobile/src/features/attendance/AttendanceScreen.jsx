@@ -32,17 +32,27 @@ export default function AttendanceScreen() {
 
   const captureAndSubmit = async () => {
     setLoading(true);
-    setShowCamera(false);
     try {
+      // 1. Take the picture FIRST — while the CameraView is still mounted.
+      //    (Calling setShowCamera(false) before this unmounts the camera and
+      //     nulls cameraRef, so the selfie was never captured.)
+      let selfieUri = null;
+      if (cameraRef.current) {
+        try {
+          const photo = await cameraRef.current.takePictureAsync({ quality: 0.6 });
+          selfieUri = photo?.uri || null;
+        } catch (err) {
+          console.warn("takePictureAsync failed:", err);
+        }
+      }
+
+      // 2. Now hide the camera UI.
+      setShowCamera(false);
+
+      // 3. Location.
       const pos = await getCurrentPosition();
       const { latitude: lat, longitude: lng } = pos.coords;
       setLocation({ lat, lng });
-
-      let selfieUri = null;
-      if (cameraRef.current) {
-        const photo = await cameraRef.current.takePictureAsync({ quality: 0.6 });
-        selfieUri = photo.uri;
-      }
 
       const formData = new FormData();
       formData.append("lat", lat.toString());

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSelector } from "react-redux";
 import {
   useGetAttendanceQuery,
   useGetTodaySummaryQuery,
@@ -6,6 +7,7 @@ import {
   useApproveAttendanceMutation,
   useRejectAttendanceMutation,
   useBulkApproveAttendanceMutation,
+  useDeleteSelfiesMutation,
 } from "./attendanceApi";
 
 const STATUS_COLORS = {
@@ -242,13 +244,60 @@ export default function AttendancePage() {
   const [tab,  setTab]  = useState("register");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [lightbox, setLightbox] = useState(null);   // record whose selfie is open
+  const [selected, setSelected] = useState([]);      // selected attendance ids (for selfie delete)
+  const [selfieMsg, setSelfieMsg] = useState(null);  // { ok, msg }
+
+  const role    = useSelector((s) => s.auth.user?.role);
+  const isAdmin = role === "admin";
 
   const { data: summary }              = useGetTodaySummaryQuery();
   const { data: reviewData }           = useGetPendingReviewsQuery();
   const { data, isLoading }            = useGetAttendanceQuery({ date });
+  const [deleteSelfies, { isLoading: deletingSelfies }] = useDeleteSelfiesMutation();
 
   const records       = data?.results || [];
   const reviewCount   = (reviewData?.results || reviewData || []).length;
+
+  const selfieIds    = records.filter((r) => r.selfie_url).map((r) => r.id);
+  const selfieCount  = selfieIds.length;
+  const allSelected  = selfieCount > 0 && selfieIds.every((id) => selected.includes(id));
+
+  const changeDate = (v) => { setDate(v); setSelected([]); setSelfieMsg(null); };
+
+  const toggleOne = (id) =>
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const toggleAll = () => setSelected(allSelected ? [] : selfieIds);
+
+  const handleDeleteSelected = async () => {
+    if (!selected.length) return;
+    if (!window.confirm(
+      `Delete ${selected.length} selfie image(s)?\n\nThe attendance records are kept — only the photos are removed. This cannot be undone.`
+    )) return;
+    setSelfieMsg(null);
+    try {
+      const res = await deleteSelfies({ ids: selected }).unwrap();
+      setSelected([]);
+      setSelfieMsg({ ok: true, msg: `✓ Deleted ${res.deleted} selfie image(s).` });
+    } catch (e) {
+      setSelfieMsg({ ok: false, msg: e?.data?.detail || "Delete failed — admin role required." });
+    }
+  };
+
+  const handleDeleteAllForDate = async () => {
+    if (!window.confirm(
+      `Delete ALL ${selfieCount} selfie image(s) captured on ${date}?\n\nAttendance records are kept — only the photos are removed. This cannot be undone.`
+    )) return;
+    setSelfieMsg(null);
+    try {
+      const res = await deleteSelfies({ date }).unwrap();
+      setSelected([]);
+      setSelfieMsg({ ok: true, msg: `✓ Deleted ${res.deleted} selfie image(s) for ${date}.` });
+    } catch (e) {
+      setSelfieMsg({ ok: false, msg: e?.data?.detail || "Delete failed — admin role required." });
+    }
+  };
+
+  const colCount = isAdmin ? 9 : 8;
 
   const kpis = [
     { label: "Present Today",  value: summary?.present      ?? "—" },
@@ -267,7 +316,7 @@ export default function AttendancePage() {
         {tab === "register" && (
           <div style={S.actions}>
             <input type="date" style={S.datePicker} value={date}
-              onChange={(e) => setDate(e.target.value)} />
+              onChange={(e) => changeDate(e.target.value)} />
           </div>
         )}
       </div>
@@ -305,9 +354,50 @@ export default function AttendancePage() {
           <div style={S.cardH}>
             <h3 style={S.cardTitle}>Attendance Register – {date}</h3>
           </div>
+
+          {/* Admin: bulk selfie management */}
+          {isAdmin && (
+            <div style={DEL.bar}>
+              <span style={DEL.info}>
+                <span style={{ fontWeight: 700, color: "#0F1E3D" }}>{selfieCount}</span> selfie
+                {selfieCount !== 1 ? "s" : ""} on this date
+                {selected.length > 0 && (
+                  <span style={{ color: "#D2453F", fontWeight: 700 }}> · {selected.length} selected</span>
+                )}
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  style={{ ...DEL.delBtn, opacity: selected.length && !deletingSelfies ? 1 : .5 }}
+                  disabled={!selected.length || deletingSelfies}
+                  onClick={handleDeleteSelected}
+                >
+                  🗑 Delete Selected{selected.length ? ` (${selected.length})` : ""}
+                </button>
+                <button
+                  style={{ ...DEL.delAllBtn, opacity: selfieCount && !deletingSelfies ? 1 : .5 }}
+                  disabled={!selfieCount || deletingSelfies}
+                  onClick={handleDeleteAllForDate}
+                >
+                  Delete All for {date}
+                </button>
+              </div>
+            </div>
+          )}
+          {selfieMsg && (
+            <div style={{ margin: "0 18px 12px", ...(selfieMsg.ok ? R.resultOk : R.resultErr) }}>
+              {selfieMsg.msg}
+            </div>
+          )}
+
           <table style={S.table}>
             <thead>
               <tr>
+                {isAdmin && (
+                  <th style={{ ...S.th, width: 38 }}>
+                    <input type="checkbox" checked={allSelected} onChange={toggleAll}
+                      disabled={selfieCount === 0} title="Select all selfies on this date" />
+                  </th>
+                )}
                 {["Employee", "Selfie", "Site", "Check-in", "Check-out", "GPS", "Geofence", "Status"].map((h) => (
                   <th key={h} style={S.th}>{h}</th>
                 ))}
@@ -315,12 +405,21 @@ export default function AttendancePage() {
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={8} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>Loading…</td></tr>
+                <tr><td colSpan={colCount} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>Loading…</td></tr>
               )}
               {records.map((r) => {
                 const sc = STATUS_COLORS[r.status] || STATUS_COLORS.absent;
                 return (
-                  <tr key={r.id}>
+                  <tr key={r.id} style={selected.includes(r.id) ? { background: "#FBE6E5" } : undefined}>
+                    {isAdmin && (
+                      <td style={S.td}>
+                        <input type="checkbox"
+                          checked={selected.includes(r.id)}
+                          disabled={!r.selfie_url}
+                          onChange={() => toggleOne(r.id)}
+                          title={r.selfie_url ? "Select selfie for deletion" : "No selfie on this record"} />
+                      </td>
+                    )}
                     <td style={S.td}>
                       <div style={S.empCell}>
                         <div style={S.av}>{r.employee_name?.slice(0, 2).toUpperCase()}</div>
@@ -357,7 +456,7 @@ export default function AttendancePage() {
                 );
               })}
               {!isLoading && records.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>No records for {date}</td></tr>
+                <tr><td colSpan={colCount} style={{ textAlign: "center", padding: 32, color: "#6B7793" }}>No records for {date}</td></tr>
               )}
             </tbody>
           </table>
@@ -399,6 +498,25 @@ const S = {
   empName:    { fontWeight: 600, color: "#0F1E3D" },
   empCode:    { fontSize: 11, color: "#6B7793" },
   pill:       { display: "inline-flex", padding: "4px 10px", borderRadius: 30, fontSize: 11.5, fontWeight: 600 },
+};
+
+const DEL = {
+  bar: {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    gap: 10, flexWrap: "wrap", padding: "10px 18px",
+    background: "#FCF4F3", borderBottom: "1px solid #F2D9D7",
+  },
+  info: { fontSize: 13, color: "#6B7793" },
+  delBtn: {
+    padding: "7px 14px", border: "1px solid #E8B4B0", borderRadius: 8,
+    background: "#FBE6E5", color: "#D2453F", fontWeight: 700, fontSize: 12.5,
+    cursor: "pointer",
+  },
+  delAllBtn: {
+    padding: "7px 14px", border: 0, borderRadius: 8,
+    background: "#D2453F", color: "#fff", fontWeight: 700, fontSize: 12.5,
+    cursor: "pointer",
+  },
 };
 
 const PHOTO = {

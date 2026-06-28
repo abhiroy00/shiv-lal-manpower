@@ -1,5 +1,6 @@
 import io
 import calendar
+import logging
 from datetime import date
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -19,6 +20,8 @@ from apps.employees.models import Employee
 
 
 LEAVE_LIMITS = {"cl": 12, "sl": 12, "el": 15, "unpaid": None}
+
+logger = logging.getLogger("attendance.checkin")
 
 
 def _build_register(year, month, site_id=None, district_id=None, search=None):
@@ -228,6 +231,56 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         att.review_note = request.data.get("note", "")
         att.save()
         return Response(AttendanceSerializer(att).data)
+
+    @action(detail=False, methods=["post"], url_path="delete-selfies")
+    def delete_selfies(self, request):
+        """Admin: bulk-delete check-in selfie images. Keeps the attendance
+        records — only clears/removes the image files.
+        Body (one of):
+          { "ids": [1, 2, 3] }   → delete selfies for those attendance records
+          { "date": "2026-06-28" } → delete all selfies captured on that date
+          { "all": true }        → delete EVERY stored selfie (use with care)
+        """
+        if request.user.role != "admin":
+            return Response({"detail": "Permission denied — admin only."}, status=403)
+
+        ids      = request.data.get("ids")
+        date_str = request.data.get("date")
+        wipe_all = request.data.get("all") is True
+
+        # Only consider records that actually have a selfie file
+        qs = Attendance.objects.exclude(selfie="").exclude(selfie__isnull=True)
+        if ids:
+            qs = qs.filter(id__in=ids)
+        elif date_str:
+            qs = qs.filter(date=date_str)
+        elif not wipe_all:
+            return Response(
+                {"detail": "Provide 'ids', 'date', or 'all': true to scope the deletion."},
+                status=400,
+            )
+
+        deleted = 0
+        for att in qs:
+            if att.selfie:
+                att.selfie.delete(save=False)   # remove the file from storage
+                att.selfie = None
+                att.save(update_fields=["selfie"])
+                deleted += 1
+        return Response({"deleted": deleted})
+
+    @action(detail=True, methods=["delete"], url_path="selfie")
+    def delete_selfie(self, request, pk=None):
+        """Admin: delete a single record's selfie image (keeps the record)."""
+        if request.user.role != "admin":
+            return Response({"detail": "Permission denied — admin only."}, status=403)
+        att = self.get_object()
+        if not att.selfie:
+            return Response({"detail": "No selfie on this record."}, status=400)
+        att.selfie.delete(save=False)
+        att.selfie = None
+        att.save(update_fields=["selfie"])
+        return Response({"deleted": 1})
 
     @action(detail=False, methods=["post"], url_path="mark",
             permission_classes=[IsAuthenticated])
@@ -456,6 +509,15 @@ class CheckInView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Diagnostic: log exactly what arrived so we can tell client vs server issues.
+        logger.info(
+            "[check-in] user=%s content_type=%s FILES=%s data_keys=%s",
+            getattr(request.user, "phone", "?"),
+            request.content_type,
+            {k: (getattr(v, "name", None), getattr(v, "size", None)) for k, v in request.FILES.items()},
+            list(request.data.keys()),
+        )
+
         serializer = CheckInSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -465,6 +527,10 @@ class CheckInView(APIView):
             return Response({"detail": "No employee linked to this account."}, status=400)
 
         selfie = serializer.validated_data.get("selfie")
+        logger.info("[check-in] user=%s parsed selfie=%s",
+                    getattr(request.user, "phone", "?"),
+                    getattr(selfie, "name", None) if selfie else None)
+
         attendance, created = process_check_in(
             employee,
             serializer.validated_data["lat"],
@@ -473,6 +539,9 @@ class CheckInView(APIView):
         )
         if not created:
             return Response({"detail": "Already checked in today."}, status=400)
+        logger.info("[check-in] user=%s saved attendance id=%s selfie_field=%s",
+                    getattr(request.user, "phone", "?"), attendance.id,
+                    bool(attendance.selfie))
         return Response(AttendanceSerializer(attendance).data, status=201)
 
 

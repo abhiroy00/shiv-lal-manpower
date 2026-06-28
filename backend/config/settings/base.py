@@ -152,5 +152,10 @@ LOGGING = {
             "level": IMPORT_LOG_LEVEL,
             "propagate": False,
         },
+        "attendance.checkin": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }
