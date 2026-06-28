@@ -20,6 +20,7 @@ import EmployeePayslipPage    from "../features/employee/EmployeePayslipPage";
 import EmployeeProfilePage    from "../features/employee/EmployeeProfilePage";
 import EmployeeAttendancePage from "../features/employee/EmployeeAttendancePage";
 import EmployeeDocumentsPage  from "../features/employee/EmployeeDocumentsPage";
+import AdminProfilePage        from "../features/auth/AdminProfilePage";
 
 const AppRoutes = [
   { path: "/login",           element: <LoginPage /> },

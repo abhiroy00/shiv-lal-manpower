@@ -60,24 +60,20 @@ class PasswordResetRequestView(APIView):
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        phone = serializer.validated_data["phone"].strip()
+        email = serializer.validated_data["email"].strip().lower()
 
-        generic = {"detail": "If that phone number belongs to an admin account with a registered email, a reset link has been sent."}
+        generic = {"detail": "If an admin account is registered with that email, a reset link has been sent."}
 
         try:
-            user = User.objects.get(phone=phone, is_active=True)
+            user = User.objects.get(email__iexact=email, is_active=True)
         except User.DoesNotExist:
-            logger.info("[reset] phone not found: %s", phone)
+            logger.info("[reset] email not found or not active: %s", email)
             return Response(generic)
 
         # Only admin/HR accounts can reset via this portal
         if user.role not in ("admin", "hr"):
-            logger.info("[reset] phone %s is role=%s — not admin/HR, ignoring", phone, user.role)
+            logger.info("[reset] email %s is role=%s — not admin/HR, ignoring", email, user.role)
             return Response(generic)
-
-        if not user.email:
-            logger.warning("[reset] admin user_id=%s has no email on file", user.id)
-            return Response({"detail": "No email address is registered for this account. Contact the system administrator."}, status=400)
 
         from django.contrib.auth.tokens import default_token_generator
         from django.utils.http import urlsafe_base64_encode
