@@ -109,6 +109,78 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         h, m = getattr(settings, "LATE_THRESHOLD", (9, 30))
         return time(h, m)
 
+    @action(detail=False, methods=["post"], url_path="bulk-fill")
+    def bulk_fill(self, request):
+        """HR/Admin: fill attendance for a date range for multiple employees."""
+        if request.user.role not in ("admin", "hr"):
+            return Response({"detail": "Permission denied."}, status=403)
+
+        from datetime import timedelta
+        from django.utils.dateparse import parse_date
+
+        from_date  = parse_date(request.data.get("from_date", "") or "")
+        to_date    = parse_date(request.data.get("to_date",   "") or "")
+        new_status = request.data.get("status")
+        emp_ids    = request.data.get("employee_ids") or []
+        overwrite  = bool(request.data.get("overwrite", True))
+
+        if not from_date or not to_date:
+            return Response({"detail": "from_date and to_date are required (YYYY-MM-DD)."}, status=400)
+        if new_status not in ("present", "late", "absent"):
+            return Response({"detail": "status must be present, late, or absent."}, status=400)
+        if to_date < from_date:
+            return Response({"detail": "to_date must be on or after from_date."}, status=400)
+        if (to_date - from_date).days > 3650:
+            return Response({"detail": "Date range cannot exceed 10 years."}, status=400)
+
+        emp_qs   = Employee.objects.filter(pk__in=emp_ids) if emp_ids else Employee.objects.filter(status="active")
+        emp_list = list(emp_qs.select_related("site"))
+        if not emp_list:
+            return Response({"detail": "No employees found for given scope."}, status=400)
+
+        # All non-Sunday dates in range
+        dates, cur = [], from_date
+        while cur <= to_date:
+            if cur.weekday() != 6:   # 6 = Sunday
+                dates.append(cur)
+            cur += timedelta(days=1)
+
+        if not dates:
+            return Response({"detail": "No working days in the selected range."}, status=400)
+
+        if new_status == "absent":
+            deleted, _ = Attendance.objects.filter(
+                employee__in=emp_list, date__in=dates
+            ).delete()
+            return Response({"deleted": deleted, "created": 0, "skipped": 0,
+                             "days": len(dates), "employees": len(emp_list)})
+
+        if overwrite:
+            Attendance.objects.filter(employee__in=emp_list, date__in=dates).delete()
+            records = [
+                Attendance(employee=emp, date=d, status=new_status,
+                           site=emp.site, geofence_ok=True)
+                for emp in emp_list for d in dates
+            ]
+            Attendance.objects.bulk_create(records, batch_size=500)
+            return Response({"created": len(records), "skipped": 0, "deleted": 0,
+                             "days": len(dates), "employees": len(emp_list)})
+        else:
+            existing = set(
+                Attendance.objects.filter(employee__in=emp_list, date__in=dates)
+                .values_list("employee_id", "date")
+            )
+            new_records = [
+                Attendance(employee=emp, date=d, status=new_status,
+                           site=emp.site, geofence_ok=True)
+                for emp in emp_list for d in dates
+                if (emp.id, d) not in existing
+            ]
+            Attendance.objects.bulk_create(new_records, batch_size=500)
+            return Response({"created": len(new_records),
+                             "skipped": len(emp_list) * len(dates) - len(new_records),
+                             "deleted": 0, "days": len(dates), "employees": len(emp_list)})
+
     @action(detail=False, methods=["post"], url_path="bulk-approve")
     def bulk_approve(self, request):
         """HR/Admin: approve all 'review' attendance records in one shot."""

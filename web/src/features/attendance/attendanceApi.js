@@ -34,6 +34,10 @@ export const attendanceApi = baseApi.injectEndpoints({
       query: () => ({ url: "/attendance/bulk-approve/", method: "POST" }),
       invalidatesTags: ["AttendanceReview", "Attendance"],
     }),
+    bulkFillAttendance: build.mutation({
+      query: (body) => ({ url: "/attendance/bulk-fill/", method: "POST", body }),
+      invalidatesTags: ["Attendance"],
+    }),
   }),
 });
 
@@ -46,4 +50,5 @@ export const {
   useApproveAttendanceMutation,
   useRejectAttendanceMutation,
   useBulkApproveAttendanceMutation,
+  useBulkFillAttendanceMutation,
 } = attendanceApi;
