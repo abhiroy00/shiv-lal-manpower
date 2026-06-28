@@ -17,6 +17,7 @@ import LeavePage from "../features/leave/LeavePage";
 import EmployeePayslipPage    from "../features/employee/EmployeePayslipPage";
 import EmployeeProfilePage    from "../features/employee/EmployeeProfilePage";
 import EmployeeAttendancePage from "../features/employee/EmployeeAttendancePage";
+import EmployeeDocumentsPage  from "../features/employee/EmployeeDocumentsPage";
 
 const AppRoutes = [
   { path: "/login", element: <LoginPage /> },
@@ -51,6 +52,7 @@ const AppRoutes = [
       { path: "attendance", element: <EmployeeAttendancePage /> },
       { path: "leave",      element: <LeavePage /> },
       { path: "profile",    element: <EmployeeProfilePage /> },
+      { path: "documents",  element: <EmployeeDocumentsPage /> },
     ],
   },
 

@@ -8,6 +8,7 @@ const EMP_NAV = [
   { label: "Attendance",   path: "/employee/attendance",  icon: "✅" },
   { label: "Leave",        path: "/employee/leave",       icon: "🏖️" },
   { label: "My Profile",   path: "/employee/profile",     icon: "👤" },
+  { label: "Documents",    path: "/employee/documents",   icon: "📄" },
 ];
 
 export default function EmployeeLayout() {
