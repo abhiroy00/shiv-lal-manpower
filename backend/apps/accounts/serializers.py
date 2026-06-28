@@ -90,8 +90,8 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
-    """Step 1 — user submits their registered email to receive a reset link."""
-    email = serializers.EmailField()
+    """Step 1 — admin submits their registered phone number to receive a reset link."""
+    phone = serializers.CharField(max_length=15)
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
