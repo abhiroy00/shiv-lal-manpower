@@ -94,11 +94,41 @@ export default function PayrollPage() {
       "bank_advice_" + selectedRun.year + "_" + String(selectedRun.month).padStart(2,"0") + ".xlsx"
     );
 
+  const handleSalarySheet = () =>
+    download(
+      "/api/payroll-runs/" + selectedRun.id + "/salary-sheet/",
+      "salary_sheet_" + selectedRun.year + "_" + String(selectedRun.month).padStart(2,"0") + ".xlsx"
+    );
+
   const handleAllPDFs = () =>
     download(
       "/api/payroll-runs/" + selectedRun.id + "/payslips-zip/",
       "payslips_" + selectedRun.year + "_" + String(selectedRun.month).padStart(2,"0") + ".zip"
     );
+
+  const handleStructureTemplate = () =>
+    download("/api/salary-structures/template/", "salary_structure_template.xlsx");
+
+  const structFileRef = { current: null };
+  const handleStructureUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch("/api/salary-structures/upload/", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + accessToken },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || "Upload failed", false); return; }
+      showToast(`✓ ${data.created} created, ${data.updated} updated${data.errors ? ", " + data.errors + " errors" : ""}`);
+    } catch {
+      showToast("Upload failed", false);
+    }
+    e.target.value = "";
+  };
 
   const handleSlipPDF = (slip) =>
     download(
@@ -118,6 +148,22 @@ export default function PayrollPage() {
       )}
 
       <div style={S.left}>
+        {/* Salary structure quick actions */}
+        <div style={S.structBox}>
+          <div style={S.structTitle}>Salary Structures</div>
+          <button style={S.structBtn} onClick={handleStructureTemplate}>
+            ⬇ Download Template
+          </button>
+          <label style={S.structUploadBtn}>
+            ⬆ Upload Sheet
+            <input type="file" accept=".xlsx" style={{ display: "none" }} onChange={handleStructureUpload} />
+          </label>
+          <div style={S.structNote}>
+            Basic ≥ ₹30,000 → TDS (10%)<br />
+            Basic &lt; ₹30,000 → PF (12%) + ESIC (0.75%)
+          </div>
+        </div>
+
         <div style={S.leftHead}>
           <div style={S.h2}>Payroll Runs</div>
           <div style={S.runControls}>
@@ -180,6 +226,9 @@ export default function PayrollPage() {
                 )}
                 <button style={S.btnBank} onClick={handleBankAdvice}>
                   Bank Advice
+                </button>
+                <button style={S.btnSalary} onClick={handleSalarySheet}>
+                  Salary Sheet
                 </button>
                 <button style={S.btnBank} onClick={handleAllPDFs}>
                   All Payslips ZIP
@@ -299,4 +348,10 @@ const S = {
   empCode:    { fontSize: 11, color: "#6B7793" },
   daysBadge:  { background: "#F4F6FA", border: "1px solid #E2E7F0", borderRadius: 6, padding: "2px 8px", fontSize: 12, fontWeight: 600, color: "#1E3563" },
   pdfLink:    { color: "#E8821E", fontWeight: 600, fontSize: 12, cursor: "pointer" },
+  btnSalary:  { padding: "8px 14px", border: "1px solid #D4AF37", borderRadius: 9, background: "#FFFBE6", fontWeight: 600, fontSize: 13, cursor: "pointer", color: "#7B5800" },
+  structBox:  { background: "#fff", border: "1px solid #E2E7F0", borderRadius: 14, padding: "12px 14px", marginBottom: 10, display: "flex", flexDirection: "column", gap: 6 },
+  structTitle:{ fontSize: 12, fontWeight: 700, color: "#0F1E3D", marginBottom: 2 },
+  structBtn:  { padding: "7px 10px", border: "1px solid #E2E7F0", borderRadius: 8, background: "#F4F6FA", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#1E3563", textAlign: "center" },
+  structUploadBtn: { padding: "7px 10px", border: "1px solid #15966A", borderRadius: 8, background: "#E1F4EC", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#15966A", textAlign: "center" },
+  structNote: { fontSize: 10.5, color: "#7B1FA2", lineHeight: 1.5, background: "#F3E5F5", borderRadius: 6, padding: "5px 8px" },
 };

@@ -1,19 +1,21 @@
 import io
 import zipfile
 import calendar
+from decimal import Decimal
 from datetime import date
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from .models import SalaryStructure, PayrollRun, Payslip
 from .serializers import SalaryStructureSerializer, PayrollRunSerializer, PayslipSerializer
-from .services import run_payroll
+from .services import run_payroll, PF_THRESHOLD
 from .pdf_service import generate_payslip_pdf
 from apps.common.permissions import IsAdminHR
 
@@ -22,6 +24,129 @@ class SalaryStructureViewSet(viewsets.ModelViewSet):
     queryset = SalaryStructure.objects.select_related("employee").all()
     serializer_class = SalaryStructureSerializer
     permission_classes = [IsAdminHR]
+
+    @action(detail=False, methods=["get"], url_path="template")
+    def template(self, request):
+        """Download a blank Excel template for bulk salary structure setup."""
+        from apps.employees.models import Employee
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Salary Structures"
+
+        navy  = PatternFill("solid", fgColor="1E3563")
+        gold  = PatternFill("solid", fgColor="D4AF37")
+        nfont = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
+        gfont = Font(name="Calibri", bold=True, color="1E3563", size=10)
+        ctr   = Alignment(horizontal="center", vertical="center")
+        thin  = Side(style="thin", color="D0D7E5")
+        bdr   = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+        # Title row
+        ws.merge_cells("A1:H1")
+        c = ws["A1"]
+        c.value = "SALARY STRUCTURE CONFIGURATION SHEET — M/S SHIV LAL MANPOWER"
+        c.font  = Font(name="Calibri", bold=True, size=13, color="1E3563")
+        c.alignment = Alignment(horizontal="center")
+        ws.row_dimensions[1].height = 26
+
+        # Rule note
+        ws.merge_cells("A2:H2")
+        ws["A2"].value = (
+            "RULE: Basic ≥ ₹30,000 → TDS (10% of gross) deducted; PF & ESIC NOT deducted.  "
+            "Basic < ₹30,000 → PF (12% of Basic) + ESIC (0.75% of Basic) deducted; TDS NOT deducted."
+        )
+        ws["A2"].font      = Font(name="Calibri", size=8.5, color="7B1FA2", italic=True)
+        ws["A2"].alignment = Alignment(horizontal="center")
+        ws.row_dimensions[2].height = 18
+
+        COLS = [
+            ("Emp Code",          14),
+            ("Employee Name",     26),
+            ("Basic (₹)",        14),
+            ("HRA (₹)",          12),
+            ("DA (₹)",           12),
+            ("Other Allowances (₹)", 20),
+            ("Regime (auto)",    16),
+            ("Notes",            30),
+        ]
+        ws.row_dimensions[3].height = 20
+        for ci, (label, w) in enumerate(COLS, 1):
+            c = ws.cell(row=3, column=ci, value=label)
+            c.font = nfont; c.fill = navy; c.alignment = ctr; c.border = bdr
+            ws.column_dimensions[get_column_letter(ci)].width = w
+
+        # Pre-fill with existing employees
+        employees = Employee.objects.filter(status="active").select_related("salary_structure").order_by("emp_code")
+        cfont = Font(name="Calibri", size=10)
+        for ri, emp in enumerate(employees, 4):
+            try:
+                ss = emp.salary_structure
+                basic = float(ss.basic); hra = float(ss.hra); da = float(ss.da); other = float(ss.other_allowances)
+            except SalaryStructure.DoesNotExist:
+                basic = hra = da = other = 0.0
+            regime = "TDS" if basic >= float(PF_THRESHOLD) else "PF + ESIC"
+            row = [emp.emp_code, emp.full_name, basic, hra, da, other, regime, ""]
+            alt  = PatternFill("solid", fgColor="F4F6FA") if ri % 2 == 0 else None
+            for ci, val in enumerate(row, 1):
+                c = ws.cell(row=ri, column=ci, value=val)
+                c.font = cfont; c.border = bdr
+                if alt: c.fill = alt
+                if ci in (3, 4, 5, 6) and val:
+                    c.number_format = '₹#,##0.00'
+
+        ws.freeze_panes = "A4"
+        buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+        resp = HttpResponse(
+            buf.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp["Content-Disposition"] = 'attachment; filename="salary_structure_template.xlsx"'
+        return resp
+
+    @action(detail=False, methods=["post"], url_path="upload")
+    def upload_structures(self, request):
+        """Bulk create/update salary structures from uploaded Excel."""
+        from apps.employees.models import Employee
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"detail": "No file uploaded."}, status=400)
+        try:
+            wb = load_workbook(file, data_only=True)
+            ws = wb.active
+        except Exception:
+            return Response({"detail": "Invalid Excel file."}, status=400)
+
+        created = updated = errors = 0
+        error_list = []
+        for row in ws.iter_rows(min_row=4, values_only=True):
+            emp_code = str(row[0] or "").strip()
+            if not emp_code:
+                continue
+            try:
+                basic = Decimal(str(row[2] or 0))
+                hra   = Decimal(str(row[3] or 0))
+                da    = Decimal(str(row[4] or 0))
+                other = Decimal(str(row[5] or 0))
+            except Exception:
+                error_list.append(f"{emp_code}: invalid numeric values")
+                errors += 1
+                continue
+            try:
+                emp = Employee.objects.get(emp_code=emp_code)
+            except Employee.DoesNotExist:
+                error_list.append(f"{emp_code}: employee not found")
+                errors += 1
+                continue
+            _, was_created = SalaryStructure.objects.update_or_create(
+                employee=emp,
+                defaults={"basic": basic, "hra": hra, "da": da, "other_allowances": other},
+            )
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+
+        return Response({"created": created, "updated": updated, "errors": errors, "error_list": error_list})
 
 
 class PayrollRunViewSet(viewsets.ModelViewSet):
@@ -149,6 +274,128 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
         wb.save(buf); buf.seek(0)
         fname = f"bank_advice_{run.year}_{run.month:02d}.xlsx"
         resp = HttpResponse(
+            buf.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp["Content-Disposition"] = f'attachment; filename="{fname}"'
+        return resp
+
+    @action(detail=True, methods=["get"], url_path="salary-sheet")
+    def salary_sheet(self, request, pk=None):
+        """Comprehensive salary sheet Excel for a payroll run."""
+        run = self.get_object()
+        payslips = run.payslips.select_related(
+            "employee__site__district__state"
+        ).order_by("employee__emp_code")
+
+        wb    = Workbook()
+        ws    = wb.active
+        ws.title = "Salary Sheet"
+        mname = calendar.month_name[run.month]
+
+        thin  = Side(style="thin", color="D0D7E5")
+        bdr   = Border(left=thin, right=thin, top=thin, bottom=thin)
+        ctr   = Alignment(horizontal="center", vertical="center")
+        navy  = PatternFill("solid", fgColor="1E3563")
+        tds_f = PatternFill("solid", fgColor="F3E5F5")
+        pf_f  = PatternFill("solid", fgColor="E3F2FD")
+        nfont = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
+        cfont = Font(name="Calibri", size=10)
+        bfont = Font(name="Calibri", bold=True, size=10)
+
+        # Title
+        ws.merge_cells("A1:Q1")
+        t = ws["A1"]
+        t.value     = f"SALARY SHEET — {mname.upper()} {run.year} — M/S SHIV LAL MANPOWER"
+        t.font      = Font(name="Calibri", bold=True, size=13, color="1E3563")
+        t.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[1].height = 26
+
+        ws.merge_cells("A2:Q2")
+        ws["A2"].value = (
+            f"Status: {run.run_status.upper()}  |  Generated: {date.today().strftime('%d %b %Y')}  |  "
+            f"Rule: Basic ≥ ₹30,000 → TDS (10%)  |  Basic < ₹30,000 → PF(12%) + ESIC(0.75%)"
+        )
+        ws["A2"].font      = Font(name="Calibri", size=8.5, color="6B7793", italic=True)
+        ws["A2"].alignment = Alignment(horizontal="center")
+        ws.row_dimensions[2].height = 16
+
+        HEADERS = [
+            ("Sr",              5),  ("Emp Code",    12), ("Employee Name",  26),
+            ("Designation",    18),  ("Site",         18), ("Days P/W",       9),
+            ("Basic (₹)",     12),  ("HRA (₹)",     10), ("DA (₹)",         10),
+            ("Other (₹)",     10),  ("Bonus (₹)",   10), ("Gross (₹)",      12),
+            ("PF Emp (₹)",    11),  ("ESIC Emp (₹)",11), ("TDS (₹)",        11),
+            ("Other Ded (₹)", 11),  ("Net Pay (₹)", 13),
+        ]
+        ws.row_dimensions[3].height = 20
+        for ci, (label, w) in enumerate(HEADERS, 1):
+            c = ws.cell(row=3, column=ci, value=label)
+            c.font = nfont; c.fill = navy; c.alignment = ctr; c.border = bdr
+            ws.column_dimensions[get_column_letter(ci)].width = w
+
+        total_gross = total_pf = total_esi = total_tds = total_net = 0.0
+        for ri, slip in enumerate(payslips, 4):
+            emp     = slip.employee
+            gross   = float(slip.basic + slip.hra + slip.da + slip.other_allowances)
+            is_tds  = float(slip.basic) >= float(PF_THRESHOLD)
+            alt     = PatternFill("solid", fgColor="F4F6FA") if ri % 2 == 0 else None
+            regime  = tds_f if is_tds else pf_f
+
+            row_vals = [
+                ri - 3,
+                emp.emp_code,
+                emp.full_name,
+                emp.designation,
+                emp.site.name if emp.site else "",
+                f"{slip.present_days}/{slip.working_days}",
+                float(slip.basic),
+                float(slip.hra),
+                float(slip.da),
+                float(slip.other_allowances),
+                float(slip.bonus),
+                gross,
+                float(slip.pf_employee),
+                float(slip.esi_employee),
+                float(slip.tds),
+                float(slip.other_deductions),
+                float(slip.net_pay),
+            ]
+            for ci, val in enumerate(row_vals, 1):
+                c = ws.cell(row=ri, column=ci, value=val)
+                c.border = bdr
+                c.font   = bfont if ci in (12, 17) else cfont
+                if alt:   c.fill = alt
+                if ci == 1: c.alignment = ctr
+                if ci >= 7:
+                    c.number_format = '₹#,##0.00'
+                # Colour-code regime columns
+                if ci in (13, 14) and not is_tds:
+                    c.fill = pf_f
+                if ci == 15 and is_tds:
+                    c.fill = tds_f
+
+            total_gross += gross
+            total_pf    += float(slip.pf_employee)
+            total_esi   += float(slip.esi_employee)
+            total_tds   += float(slip.tds)
+            total_net   += float(slip.net_pay)
+
+        # Totals row
+        tot = len(payslips) + 4
+        ws.cell(tot, 2, "TOTAL").font = bfont
+        for ci, val in [(12, total_gross),(13, total_pf),(14, total_esi),(15, total_tds),(17, total_net)]:
+            c = ws.cell(tot, ci, val)
+            c.font   = Font(name="Calibri", bold=True, size=10, color="15966A")
+            c.number_format = '₹#,##0.00'
+            c.border = bdr
+
+        ws.freeze_panes = "A4"
+        ws.auto_filter.ref = f"A3:Q3"
+
+        buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+        fname = f"salary_sheet_{run.year}_{run.month:02d}.xlsx"
+        resp  = HttpResponse(
             buf.read(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )

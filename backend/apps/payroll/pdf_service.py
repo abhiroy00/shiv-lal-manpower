@@ -211,22 +211,38 @@ def generate_payslip_pdf(payslip):
     gross   = float(payslip.basic + payslip.hra + payslip.da + payslip.other_allowances)
     pf_emp  = float(payslip.pf_employee)
     esi_emp = float(payslip.esi_employee)
+    tds_amt = float(payslip.tds)
     other_d = float(payslip.other_deductions)
-    total_d = pf_emp + esi_emp + other_d
     net     = float(payslip.net_pay)
+
+    # Regime: basic >= 30000 → TDS regime; else PF+ESIC regime
+    high_salary = float(payslip.basic) >= 30000
+    total_d = pf_emp + esi_emp + tds_amt + other_d
 
     earn_rows = [
         ["Basic Salary",         _inr(payslip.basic)],
         ["House Rent Allowance", _inr(payslip.hra)],
         ["Dearness Allowance",   _inr(payslip.da)],
         ["Other Allowances",     _inr(payslip.other_allowances)],
+        ["Bonus",                _inr(payslip.bonus)],
     ]
-    ded_rows = [
-        ["PF (Employee 12%)",    _inr(pf_emp)],
-        ["ESI (Employee 0.75%)", _inr(esi_emp)],
-        ["Other Deductions",     _inr(other_d)],
-        ["", ""],
-    ]
+
+    if high_salary:
+        ded_rows = [
+            ["TDS (Income Tax @ 10%)",    _inr(tds_amt)],
+            ["Other Deductions",          _inr(other_d)],
+            ["", ""],
+            ["", ""],
+            ["", ""],
+        ]
+    else:
+        ded_rows = [
+            ["PF – Employee (12% of Basic)",   _inr(pf_emp)],
+            ["ESIC – Employee (0.75% of Basic)", _inr(esi_emp)],
+            ["Other Deductions",               _inr(other_d)],
+            ["", ""],
+            ["", ""],
+        ]
 
     cell_w = (W - 2 * MARGIN) / 2 - 3
 
@@ -293,7 +309,22 @@ def generate_payslip_pdf(payslip):
         f"<i>Amount in words: <b>{_num_to_words(int(net))}</b></i>",
         ParagraphStyle("words", fontName="Helvetica-Oblique", fontSize=8.5, textColor=MID, leading=12),
     ))
-    story.append(Spacer(1, 14))
+    story.append(Spacer(1, 6))
+
+    # Salary regime note
+    if high_salary:
+        regime_text = "Salary Regime: TDS applicable (Basic ≥ ₹30,000) — PF & ESIC not deducted."
+        regime_color = colors.HexColor("#7B1FA2")
+    else:
+        regime_text = "Salary Regime: PF & ESIC applicable (Basic < ₹30,000) — TDS not deducted."
+        regime_color = colors.HexColor("#1565C0")
+
+    story.append(Paragraph(
+        regime_text,
+        ParagraphStyle("regime", fontName="Helvetica-Oblique", fontSize=8,
+                       textColor=regime_color, leading=11),
+    ))
+    story.append(Spacer(1, 10))
 
     # ── Footer ────────────────────────────────────────────────
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#E2E7F0")))
