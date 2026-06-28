@@ -1,256 +1,298 @@
 """
-Generate payslip PDF using ReportLab (pure Python, no system libs needed).
+Generate payslip PDF using ReportLab.
+Uses DejaVu Sans (bundled in fonts/) for ₹ (U+20B9) support — base-14 fonts lack it.
 """
 import io
 import os
 import calendar
+
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph,
-    Spacer, HRFlowable, KeepTogether,
+    Spacer, HRFlowable, Image as RLImage,
 )
-from reportlab.pdfgen import canvas as rl_canvas
-from reportlab.lib.utils import ImageReader
 
-# ── Colour palette ────────────────────────────────────────────
-NAVY    = colors.HexColor("#1E3563")
-ORANGE  = colors.HexColor("#E8821E")
-LIGHT   = colors.HexColor("#F4F6FA")
-GREEN   = colors.HexColor("#15966A")
-RED_C   = colors.HexColor("#D2453F")
-MID     = colors.HexColor("#6B7793")
-WHITE   = colors.white
-BLACK   = colors.HexColor("#0F1E3D")
-GOLD    = colors.HexColor("#D4AF37")
+# ── Font registration ──────────────────────────────────────────
+_FONTS_DIR = os.path.join(os.path.dirname(__file__), "fonts")
+pdfmetrics.registerFont(TTFont("DejaVu",      os.path.join(_FONTS_DIR, "DejaVuSans.ttf")))
+pdfmetrics.registerFont(TTFont("DejaVu-Bold", os.path.join(_FONTS_DIR, "DejaVuSans-Bold.ttf")))
 
-W, H = A4          # 595.27 x 841.89 points
+# ── Colours ────────────────────────────────────────────────────
+NAVY   = colors.HexColor("#1E3563")
+LIGHT  = colors.HexColor("#F4F6FA")
+GREEN  = colors.HexColor("#15966A")
+RED_C  = colors.HexColor("#D2453F")
+MID    = colors.HexColor("#6B7793")
+WHITE  = colors.white
+BLACK  = colors.HexColor("#0F1E3D")
+GOLD   = colors.HexColor("#D4AF37")
+PURPLE = colors.HexColor("#7B1FA2")
+
+W, H   = A4
 MARGIN = 18 * mm
 
-LOGO_PATH = os.path.join(os.path.dirname(__file__), "shivlal_logo.jpeg")
+LOGO_PATH = os.path.join(os.path.dirname(__file__), "shivlal.png")
+QR_URL    = "https://admin.shivlalmanpower.com/"
 
 
 def _inr(v):
-    v = float(v or 0)
-    return f"₹{v:,.2f}"
+    return f"₹{float(v or 0):,.2f}"
 
 
 def _num_to_words(n):
-    ones = ["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine",
-            "Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen",
-            "Seventeen","Eighteen","Nineteen"]
-    tens = ["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"]
+    ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+            "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+            "Seventeen", "Eighteen", "Nineteen"]
+    tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
 
-    def _below_1000(n):
-        if n < 20:
-            return ones[n]
-        elif n < 100:
-            r = tens[n // 10]
-            if n % 10: r += " " + ones[n % 10]
-            return r
-        else:
-            r = ones[n // 100] + " Hundred"
-            if n % 100: r += " " + _below_1000(n % 100)
-            return r
+    def _sub1k(x):
+        if x < 20:  return ones[x]
+        if x < 100: return tens[x // 10] + (" " + ones[x % 10] if x % 10 else "")
+        return ones[x // 100] + " Hundred" + (" " + _sub1k(x % 100) if x % 100 else "")
 
     n = int(n)
-    if n == 0: return "Zero"
-    lakh   = n // 100000; n %= 100000
-    thou   = n // 1000;   n %= 1000
-    result = ""
-    if lakh:   result += _below_1000(lakh) + " Lakh "
-    if thou:   result += _below_1000(thou) + " Thousand "
-    if n:      result += _below_1000(n)
-    return result.strip() + " Only"
+    if n == 0: return "Zero Only"
+    parts = []
+    if n >= 100000: parts.append(_sub1k(n // 100000) + " Lakh");    n %= 100000
+    if n >= 1000:   parts.append(_sub1k(n // 1000)   + " Thousand"); n %= 1000
+    if n:           parts.append(_sub1k(n))
+    return " ".join(parts) + " Only"
+
+
+def _logo_buf(max_px=220):
+    """Return a BytesIO of the logo resized to max_px on the long side."""
+    try:
+        from PIL import Image as PILImage
+        img = PILImage.open(LOGO_PATH).convert("RGBA")
+        img.thumbnail((max_px, max_px), PILImage.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return buf
+    except Exception:
+        return None
+
+
+def _make_qr(url, pts=54):
+    try:
+        import qrcode
+        qr = qrcode.QRCode(version=1, box_size=4, border=2,
+                           error_correction=qrcode.constants.ERROR_CORRECT_M)
+        qr.add_data(url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="#1E3563", back_color="white")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return RLImage(buf, width=pts, height=pts)
+    except Exception:
+        return None
+
+
+_LOGO_BUF = None  # cached resized logo bytes
+
+def _get_logo_buf():
+    global _LOGO_BUF
+    if _LOGO_BUF is None:
+        _LOGO_BUF = _logo_buf(max_px=220)
+    return _LOGO_BUF
 
 
 def _draw_watermark(c, doc):
-    """Draw the logo watermark centred on the page at 12% opacity."""
     c.saveState()
     try:
-        img = ImageReader(LOGO_PATH)
-        size = 220  # points (~78 mm) — large but subtle
-        x = (W - size) / 2
-        y = (H - size) / 2
-        c.setFillAlpha(0.12)
-        c.drawImage(img, x, y, width=size, height=size,
+        buf = _get_logo_buf()
+        if buf:
+            buf.seek(0)
+            img = ImageReader(buf)
+        else:
+            img = ImageReader(LOGO_PATH)
+        sz = 210
+        c.setFillAlpha(0.10)
+        c.drawImage(img, (W - sz) / 2, (H - sz) / 2, width=sz, height=sz,
                     preserveAspectRatio=True, mask="auto")
     except Exception:
-        pass  # if logo file missing, skip silently
+        pass
     c.restoreState()
 
 
 def generate_payslip_pdf(payslip):
-    """Return BytesIO containing the PDF for one payslip."""
+    """Return BytesIO containing the A4 payslip PDF."""
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=MARGIN, rightMargin=MARGIN,
-        topMargin=MARGIN, bottomMargin=MARGIN,
-    )
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=MARGIN, rightMargin=MARGIN,
+                            topMargin=MARGIN, bottomMargin=MARGIN)
 
     emp   = payslip.employee
     run   = payslip.payroll_run
     mname = calendar.month_name[run.month]
 
-    normal = ParagraphStyle("n",  fontName="Helvetica",      fontSize=9,  leading=13, textColor=BLACK)
-    small  = ParagraphStyle("s",  fontName="Helvetica",      fontSize=8,  leading=11, textColor=MID)
-    bold9  = ParagraphStyle("b9", fontName="Helvetica-Bold", fontSize=9,  leading=13, textColor=BLACK)
-    val_right   = ParagraphStyle("vr",  fontName="Helvetica",      fontSize=9,  alignment=TA_RIGHT, textColor=BLACK,  leading=12)
-    val_right_b = ParagraphStyle("vrb", fontName="Helvetica-Bold", fontSize=9,  alignment=TA_RIGHT, textColor=GREEN,  leading=12)
-    th_style    = ParagraphStyle("th",  fontName="Helvetica-Bold", fontSize=9,  textColor=WHITE, leading=12)
+    # ── Paragraph style helper ─────────────────────────────────
+    def _s(name, font="DejaVu", size=9, color=BLACK, align=0, leading=13, **kw):
+        return ParagraphStyle(name, fontName=font, fontSize=size, textColor=color,
+                              leading=leading, alignment=align, **kw)
+
+    sml  = _s("sml",  size=8,  color=MID,   leading=11)
+    nrm  = _s("nrm")
+    bld  = _s("bld",  font="DejaVu-Bold")
+    vr   = _s("vr",   align=TA_RIGHT)
+    vrg  = _s("vrg",  font="DejaVu-Bold", align=TA_RIGHT, color=GREEN)
+    vrr  = _s("vrr",  font="DejaVu-Bold", align=TA_RIGHT, color=RED_C)
+    th   = _s("th",   font="DejaVu-Bold", color=WHITE, leading=12)
 
     story = []
 
-    # ── Company name banner ──────────────────────────────────
-    co_banner_data = [[
-        Paragraph(
-            "<font color='#D4AF37' size='7'>M/S</font> "
-            "<font color='white' size='11'><b>SHIV LAL MANPOWER</b></font>",
-            ParagraphStyle("co", fontName="Helvetica-Bold", fontSize=11,
-                           textColor=WHITE, leading=16, alignment=TA_CENTER),
-        ),
-    ]]
-    co_banner = Table(co_banner_data, colWidths=[W - 2 * MARGIN])
-    co_banner.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, -1), colors.HexColor("#0A1428")),
-        ("TOPPADDING",    (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    # ── Header: [logo | company + payslip | QR] ───────────────
+    # Logo is 1080×1350 RGBA (portrait, ratio 0.8). Display at 46×58 so it
+    # fits the header height without distortion. Transparent bg shows navy.
+    logo_img_w, logo_img_h = 46, 58
+    logo_col_w, qr_w = 56, 54
+    mid_w = W - 2 * MARGIN - logo_col_w - qr_w - 14
+
+    logo_buf = _get_logo_buf()
+    logo_cell = RLImage(logo_buf, width=logo_img_w, height=logo_img_h) \
+        if logo_buf else Spacer(logo_img_w, logo_img_h)
+    qr_cell = _make_qr(QR_URL, qr_w) or Spacer(qr_w, qr_w)
+
+    centre_tbl = Table([
+        [Paragraph(
+            "<font color='#D4AF37'>M/S</font>  SHIV LAL MANPOWER",
+            _s("cn", font="DejaVu-Bold", size=13, color=WHITE,
+               align=TA_CENTER, leading=17),
+        )],
+        [Paragraph(
+            f"<b><font size='14'>PAYSLIP</font></b>"
+            f"  <font size='9' color='#AEB9D4'>{mname} {run.year}</font>",
+            _s("ps", font="DejaVu-Bold", size=13, color=WHITE,
+               align=TA_CENTER, leading=19),
+        )],
+    ], colWidths=[mid_w])
+    centre_tbl.setStyle(TableStyle([
+        ("TOPPADDING",    (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ("LEFTPADDING",   (0, 0), (-1, -1), 0),
         ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-        ("LINEBELOW",     (0, 0), (-1, -1), 1.5, GOLD),
     ]))
-    story.append(co_banner)
-    story.append(Spacer(1, 4))
 
-    # ── Header bar (PAYSLIP title + month) ───────────────────
-    header_data = [[
-        Paragraph(
-            "<font color='white' size='14'><b>Shiv Lal Manpower</b></font>"
-            "<br/><font color='#AEB9D4' size='8'>Operations Console · Manpower Services</font>",
-            ParagraphStyle("hdr", fontName="Helvetica-Bold", fontSize=14,
-                           textColor=WHITE, leading=20),
-        ),
-        Paragraph(
-            f"<font color='white' size='13'><b>PAYSLIP</b></font><br/>"
-            f"<font color='#AEB9D4' size='9'>{mname} {run.year}</font>",
-            ParagraphStyle("hdr2", fontName="Helvetica-Bold", fontSize=13,
-                           textColor=WHITE, leading=18, alignment=TA_RIGHT),
-        ),
-    ]]
-    header_tbl = Table(header_data, colWidths=[W - 2 * MARGIN - 120, 120])
-    header_tbl.setStyle(TableStyle([
+    hdr = Table(
+        [[logo_cell, centre_tbl, qr_cell]],
+        colWidths=[logo_col_w, mid_w, qr_w + 6],
+    )
+    hdr.setStyle(TableStyle([
         ("BACKGROUND",    (0, 0), (-1, -1), NAVY),
         ("TOPPADDING",    (0, 0), (-1, -1), 10),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-        ("LEFTPADDING",   (0, 0), (0, -1),  12),
-        ("RIGHTPADDING",  (-1, 0), (-1, -1), 12),
+        ("LEFTPADDING",   (0, 0), (0, 0),   8),
+        ("LEFTPADDING",   (1, 0), (1, 0),   0),
+        ("RIGHTPADDING",  (1, 0), (1, 0),   0),
+        ("RIGHTPADDING",  (-1, 0), (-1, -1), 8),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+        ("LINEBELOW",     (0, 0), (-1, -1), 1.5, GOLD),
     ]))
-    story.append(header_tbl)
-    story.append(Spacer(1, 6))
+    story.append(hdr)
+    story.append(Spacer(1, 8))
 
-    # ── Employee info block ───────────────────────────────────
-    def kv(label, value):
-        return [Paragraph(label, small), Paragraph(f"<b>{value or '—'}</b>", bold9)]
+    # ── Employee / pay-period info grid ───────────────────────
+    def kv(label, val):
+        return [Paragraph(label, sml), Paragraph(f"<b>{val or '—'}</b>", bld)]
 
     site_str = emp.site.name if emp.site else "Not assigned"
     dist_str = emp.site.district.name if emp.site and emp.site.district else ""
-    loc = f"{site_str}{' · ' + dist_str if dist_str else ''}"
+    loc      = site_str + (" · " + dist_str if dist_str else "")
 
-    emp_rows = [
-        kv("Employee Name", emp.full_name),
-        kv("Employee Code", emp.emp_code),
-        kv("Designation",   emp.designation),
-        kv("Deployment",    loc),
-        kv("UAN",           emp.uan or "Not registered"),
-        kv("ESIC No.",      emp.esic_no or "Not registered"),
-    ]
+    col_a = [kv("Employee Name", emp.full_name),
+             kv("Employee Code", emp.emp_code),
+             kv("Designation",   emp.designation)]
+    col_b = [kv("Deployment",    loc),
+             kv("UAN",           emp.uan       or "Not registered"),
+             kv("ESIC No.",      emp.esic_no   or "Not registered")]
+    col_c = [kv("Pay Period",   f"{mname} {run.year}"),
+             kv("Days Present",  str(payslip.present_days)),
+             kv("Days Absent",   str(payslip.working_days - payslip.present_days)),
+             kv("PAN",           emp.pan          or "Not provided"),
+             kv("Bank A/c",      emp.bank_account or "Not provided")]
 
-    pay_period = [
-        kv("Pay Period",   f"{mname} {run.year}"),
-        kv("Working Days", str(payslip.working_days)),
-        kv("Days Present", str(payslip.present_days)),
-        kv("Days Absent",  str(payslip.working_days - payslip.present_days)),
-        kv("PAN",          emp.pan or "Not provided"),
-        kv("Bank A/c",     emp.bank_account or "Not provided"),
-    ]
-
-    half       = len(emp_rows) // 2
-    left_rows  = emp_rows[:half]
-    right_rows = emp_rows[half:]
-
-    def make_info_col(rows):
-        t = Table([[lp, vp] for lp, vp in rows], colWidths=[55, 130])
+    def _info_col(rows):
+        t = Table([[a, b] for a, b in rows], colWidths=[58, None])
         t.setStyle(TableStyle([
             ("TOPPADDING",    (0, 0), (-1, -1), 3),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
         ]))
         return t
 
-    info_data = [[make_info_col(left_rows), make_info_col(right_rows), make_info_col(pay_period)]]
-    info_tbl  = Table(info_data, colWidths=[(W - 2 * MARGIN) / 3] * 3)
-    info_tbl.setStyle(TableStyle([
+    col_w = (W - 2 * MARGIN) / 3
+    info = Table([[_info_col(col_a), _info_col(col_b), _info_col(col_c)]],
+                 colWidths=[col_w, col_w, col_w])
+    info.setStyle(TableStyle([
         ("BACKGROUND",    (0, 0), (-1, -1), LIGHT),
         ("BOX",           (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E7F0")),
+        ("LINEAFTER",     (0, 0), (1, -1),  0.5, colors.HexColor("#D0D7E5")),
         ("TOPPADDING",    (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
         ("LEFTPADDING",   (0, 0), (-1, -1), 10),
         ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
         ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ("LINEAFTER",     (0, 0), (1, -1),  0.5, colors.HexColor("#D0D7E5")),
     ]))
-    story.append(info_tbl)
+    story.append(info)
     story.append(Spacer(1, 10))
 
-    # ── Earnings & Deductions table ───────────────────────────
-    gross   = float(payslip.basic + payslip.hra + payslip.da + payslip.other_allowances)
+    # ── Salary figures ────────────────────────────────────────
+    basic   = float(payslip.basic)
+    hra     = float(payslip.hra)
+    da      = float(payslip.da)
+    other_a = float(payslip.other_allowances)
+    bonus   = float(payslip.bonus)
+    gross   = basic + hra + da + other_a + bonus
+
     pf_emp  = float(payslip.pf_employee)
     esi_emp = float(payslip.esi_employee)
     tds_amt = float(payslip.tds)
     other_d = float(payslip.other_deductions)
+    total_d = pf_emp + esi_emp + tds_amt + other_d
     net     = float(payslip.net_pay)
 
-    # Regime: basic >= 30000 → TDS regime; else PF+ESIC regime
-    high_salary = float(payslip.basic) >= 30000
-    total_d = pf_emp + esi_emp + tds_amt + other_d
+    high_salary = basic >= 30000
 
     earn_rows = [
-        ["Basic Salary",         _inr(payslip.basic)],
-        ["House Rent Allowance", _inr(payslip.hra)],
-        ["Dearness Allowance",   _inr(payslip.da)],
-        ["Other Allowances",     _inr(payslip.other_allowances)],
-        ["Bonus",                _inr(payslip.bonus)],
+        ("Basic Salary",         _inr(basic)),
+        ("House Rent Allowance", _inr(hra)),
+        ("Dearness Allowance",   _inr(da)),
+        ("Other Allowances",     _inr(other_a)),
+        ("Bonus",                _inr(bonus)),
     ]
-
     if high_salary:
         ded_rows = [
-            ["TDS (Income Tax @ 10%)",    _inr(tds_amt)],
-            ["Other Deductions",          _inr(other_d)],
-            ["", ""],
-            ["", ""],
-            ["", ""],
+            ("TDS (Income Tax @ 10%)", _inr(tds_amt)),
+            ("Other Deductions",       _inr(other_d)),
+            ("", ""), ("", ""), ("", ""),
         ]
     else:
         ded_rows = [
-            ["PF – Employee (12% of Basic)",   _inr(pf_emp)],
-            ["ESIC – Employee (0.75% of Basic)", _inr(esi_emp)],
-            ["Other Deductions",               _inr(other_d)],
-            ["", ""],
-            ["", ""],
+            ("PF – Employee (12% of Basic)",     _inr(pf_emp)),
+            ("ESIC – Employee (0.75% of Basic)", _inr(esi_emp)),
+            ("Other Deductions",                 _inr(other_d)),
+            ("", ""), ("", ""),
         ]
 
-    cell_w = (W - 2 * MARGIN) / 2 - 3
+    cw = (W - 2 * MARGIN) / 2 - 3
 
-    def make_earn_tbl(data, bg_hdr):
-        t = Table(data, colWidths=[cell_w * 0.62, cell_w * 0.38])
+    def _salary_tbl(rows, total_label, total_val, total_style, hdr_color):
+        data  = [[Paragraph("Component", th), Paragraph("Amount", th)]]
+        data += [[Paragraph(l, nrm), Paragraph(v, vr)] for l, v in rows]
+        data += [[Paragraph(f"<b>{total_label}</b>", bld),
+                  Paragraph(f"<b>{total_val}</b>", total_style)]]
+        t = Table(data, colWidths=[cw * 0.62, cw * 0.38])
         t.setStyle(TableStyle([
-            ("BACKGROUND",    (0, 0), (-1, 0),  bg_hdr),
-            ("TEXTCOLOR",     (0, 0), (-1, 0),  WHITE),
+            ("BACKGROUND",    (0, 0), (-1, 0),  hdr_color),
             ("TOPPADDING",    (0, 0), (-1, -1), 5),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
             ("LEFTPADDING",   (0, 0), (0, -1),  8),
@@ -262,91 +304,64 @@ def generate_payslip_pdf(payslip):
         ]))
         return t
 
-    left_tbl_data  = [[Paragraph("Earnings",  th_style), Paragraph("Amount", th_style)]]
-    left_tbl_data += [[Paragraph(r[0], normal), Paragraph(r[1], val_right)] for r in earn_rows]
-    left_tbl_data += [[Paragraph("<b>Gross Earnings</b>", bold9), Paragraph(f"<b>{_inr(gross)}</b>", val_right_b)]]
+    earn_tbl = _salary_tbl(earn_rows, "Gross Earnings",   _inr(gross), vrg, NAVY)
+    ded_tbl  = _salary_tbl(ded_rows,  "Total Deductions", _inr(total_d), vrr, PURPLE)
 
-    right_tbl_data  = [[Paragraph("Deductions", th_style), Paragraph("Amount", th_style)]]
-    right_tbl_data += [[Paragraph(r[0], normal), Paragraph(r[1], val_right)] for r in ded_rows]
-    right_tbl_data += [[Paragraph("<b>Total Deductions</b>", bold9),
-                        Paragraph(f"<b>{_inr(total_d)}</b>",
-                                  ParagraphStyle("red", fontName="Helvetica-Bold", fontSize=9,
-                                                 alignment=TA_RIGHT, textColor=RED_C))]]
-
-    earn_tbl = make_earn_tbl(left_tbl_data,  NAVY)
-    ded_tbl  = make_earn_tbl(right_tbl_data, colors.HexColor("#7B1FA2"))
-
-    combined = Table([[earn_tbl, Spacer(6, 1), ded_tbl]], colWidths=[cell_w, 6, cell_w])
-    combined.setStyle(TableStyle([
-        ("TOPPADDING",    (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-    ]))
-    story.append(combined)
+    cols = Table([[earn_tbl, Spacer(6, 1), ded_tbl]], colWidths=[cw, 6, cw])
+    cols.setStyle(TableStyle([("TOPPADDING",    (0, 0), (-1, -1), 0),
+                               ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                               ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                               ("RIGHTPADDING",  (0, 0), (-1, -1), 0)]))
+    story.append(cols)
     story.append(Spacer(1, 10))
 
-    # ── Net Pay box ───────────────────────────────────────────
-    net_data = [[
-        Paragraph("NET PAY", ParagraphStyle("np",  fontName="Helvetica-Bold", fontSize=11, textColor=WHITE)),
-        Paragraph(_inr(net), ParagraphStyle("npv", fontName="Helvetica-Bold", fontSize=14, textColor=WHITE,
-                                             alignment=TA_RIGHT)),
-    ]]
-    net_tbl = Table(net_data, colWidths=[W - 2 * MARGIN - 140, 140])
+    # ── Net Pay banner ─────────────────────────────────────────
+    net_tbl = Table(
+        [[Paragraph("NET PAY",
+                    _s("npl", font="DejaVu-Bold", size=11, color=WHITE)),
+          Paragraph(_inr(net),
+                    _s("npv", font="DejaVu-Bold", size=14, color=WHITE, align=TA_RIGHT))]],
+        colWidths=[W - 2 * MARGIN - 150, 150],
+    )
     net_tbl.setStyle(TableStyle([
         ("BACKGROUND",    (0, 0), (-1, -1), GREEN),
-        ("TOPPADDING",    (0, 0), (-1, -1), 10),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-        ("LEFTPADDING",   (0, 0), (0, -1),  14),
+        ("TOPPADDING",    (0, 0), (-1, -1), 11),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 11),
+        ("LEFTPADDING",   (0, 0), (0, 0),   14),
         ("RIGHTPADDING",  (-1, 0), (-1, -1), 14),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("ROUNDEDCORNERS",(0, 0), (-1, -1), [6, 6, 6, 6]),
     ]))
     story.append(net_tbl)
     story.append(Spacer(1, 6))
-
     story.append(Paragraph(
-        f"<i>Amount in words: <b>{_num_to_words(int(net))}</b></i>",
-        ParagraphStyle("words", fontName="Helvetica-Oblique", fontSize=8.5, textColor=MID, leading=12),
+        f"Amount in words: <b>{_num_to_words(int(net))}</b>",
+        _s("words", size=8.5, color=MID, leading=12),
     ))
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 5))
 
-    # Salary regime note
     if high_salary:
-        regime_text = "Salary Regime: TDS applicable (Basic ≥ ₹30,000) — PF & ESIC not deducted."
-        regime_color = colors.HexColor("#7B1FA2")
+        regime_txt = "Salary Regime: TDS applicable (Basic ≥ ₹30,000) — PF & ESIC not deducted."
+        regime_clr = PURPLE
     else:
-        regime_text = "Salary Regime: PF & ESIC applicable (Basic < ₹30,000) — TDS not deducted."
-        regime_color = colors.HexColor("#1565C0")
-
-    story.append(Paragraph(
-        regime_text,
-        ParagraphStyle("regime", fontName="Helvetica-Oblique", fontSize=8,
-                       textColor=regime_color, leading=11),
-    ))
+        regime_txt = "Salary Regime: PF & ESIC applicable (Basic < ₹30,000) — TDS not deducted."
+        regime_clr = colors.HexColor("#1565C0")
+    story.append(Paragraph(regime_txt, _s("regime", size=8, color=regime_clr, leading=11)))
     story.append(Spacer(1, 10))
 
-    # ── Footer ────────────────────────────────────────────────
+    # ── Footer ─────────────────────────────────────────────────
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#E2E7F0")))
-    story.append(Spacer(1, 6))
-    footer_data = [[
-        Paragraph(
-            "This is a system-generated payslip and does not require a signature.",
-            ParagraphStyle("ft",  fontName="Helvetica-Oblique", fontSize=7.5, textColor=MID),
-        ),
-        Paragraph(
-            f"M/S Shiv Lal Manpower · {mname} {run.year}",
-            ParagraphStyle("ftr", fontName="Helvetica", fontSize=7.5, textColor=MID, alignment=TA_RIGHT),
-        ),
-    ]]
-    footer_tbl = Table(footer_data, colWidths=[(W - 2 * MARGIN) / 2] * 2)
-    footer_tbl.setStyle(TableStyle([
-        ("TOPPADDING",    (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-    ]))
-    story.append(footer_tbl)
+    story.append(Spacer(1, 5))
+    story.append(Table(
+        [[Paragraph("This is a system-generated payslip and does not require a signature.",
+                    _s("ftl", size=7.5, color=MID)),
+          Paragraph(f"M/S Shiv Lal Manpower · {mname} {run.year}",
+                    _s("ftr", size=7.5, color=MID, align=TA_RIGHT))]],
+        colWidths=[(W - 2 * MARGIN) / 2] * 2,
+        style=TableStyle([("TOPPADDING",    (0, 0), (-1, -1), 0),
+                           ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                           ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                           ("RIGHTPADDING",  (0, 0), (-1, -1), 0)]),
+    ))
 
     doc.build(story, onFirstPage=_draw_watermark, onLaterPages=_draw_watermark)
     buf.seek(0)
