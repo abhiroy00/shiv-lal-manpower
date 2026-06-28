@@ -1,4 +1,6 @@
 import io
+import logging
+import traceback
 from datetime import date
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -13,6 +15,9 @@ from .models import Employee, EmployeeDocument
 from .serializers import EmployeeSerializer, EmployeeListSerializer, EmployeeDocumentSerializer
 from .filters import EmployeeFilter
 from apps.common.permissions import IsAdminHR
+
+
+logger = logging.getLogger("employees.import")
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
@@ -209,11 +214,23 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="import")
     def import_employees(self, request):
         """Bulk-create employees from an uploaded Excel file."""
+        import time, uuid
+        imp_id = uuid.uuid4().hex[:8]          # short id to correlate log lines
+        t_start = time.time()
+
         if request.user.role not in ("admin", "hr"):
+            logger.warning("[import %s] DENIED — user=%s role=%s", imp_id,
+                           getattr(request.user, "phone", "?"), getattr(request.user, "role", "?"))
             return Response({"detail": "Permission denied."}, status=403)
         file = request.FILES.get("file")
         if not file:
+            logger.warning("[import %s] no file provided by user=%s", imp_id,
+                           getattr(request.user, "phone", "?"))
             return Response({"detail": "No file provided. Upload an .xlsx file."}, status=400)
+
+        logger.info("[import %s] START — user=%s file=%r size=%s bytes", imp_id,
+                    getattr(request.user, "phone", "?"), getattr(file, "name", "?"),
+                    getattr(file, "size", "?"))
 
         from openpyxl import load_workbook
         from django.db import IntegrityError
@@ -224,15 +241,28 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         try:
             wb = load_workbook(file, data_only=True)
         except Exception:
+            logger.error("[import %s] FAILED to open workbook:\n%s", imp_id, traceback.format_exc())
             return Response({"detail": "Invalid Excel file. Please use the provided template."}, status=400)
 
         ws = wb.active
         if ws.max_row < 2:
+            logger.warning("[import %s] empty file — max_row=%s", imp_id, ws.max_row)
             return Response({"detail": "File is empty — no data rows found."}, status=400)
 
         # Map header name → 0-based index
         headers = [str(ws.cell(1, c).value or "").strip() for c in range(1, ws.max_column + 1)]
         col = {h: i for i, h in enumerate(headers)}
+
+        # Log which columns were detected vs which the importer looks for, so a
+        # header typo (e.g. "Aadhaar" vs "Aadhar") is obvious in the logs.
+        EXPECTED_COLS = ["Emp Code", "Full Name", "Designation", "Phone", "State",
+                         "District", "Site", "Date Joined", "Status", "UAN",
+                         "ESIC No", "Aadhar", "PAN", "Bank Account", "IFSC", "TDS"]
+        missing_cols = [c for c in EXPECTED_COLS if c not in col]
+        logger.info("[import %s] rows=%s headers=%s", imp_id, ws.max_row - 1, headers)
+        if missing_cols:
+            logger.warning("[import %s] columns NOT found in sheet (will be treated as blank): %s",
+                           imp_id, missing_cols)
 
         def cell_str(row, name):
             idx = col.get(name)
@@ -303,6 +333,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             if row_errors:
                 errors.append({"row": row_idx, "name": full_name, "error": "; ".join(row_errors)})
                 skipped += 1
+                logger.info("[import %s] row %s SKIP (%s) — %s", imp_id, row_idx,
+                            full_name, "; ".join(row_errors))
                 continue
 
             emp_code = cell_str(row_idx, "Emp Code")
@@ -334,6 +366,9 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                     ).first()
                 if site is None:
                     site = qs_site.filter(name__iexact=site_name).first()
+                if site is None:
+                    logger.warning("[import %s] row %s (%s) — site not matched: site=%r district=%r state=%r",
+                                   imp_id, row_idx, full_name, site_name, district_name, state_name)
 
             status_val = STATUS_MAP.get(cell_str(row_idx, "Status"), "active")
 
@@ -351,11 +386,15 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 errors.append({"row": row_idx, "name": full_name,
                                 "error": f"Phone too long ({len(phone)} chars, max 15)"})
                 skipped += 1
+                logger.info("[import %s] row %s SKIP (%s) — phone too long: %r",
+                            imp_id, row_idx, full_name, phone)
                 continue
             if len(emp_code) > 20:
                 errors.append({"row": row_idx, "name": full_name,
                                 "error": f"Emp code too long ({len(emp_code)} chars, max 20)"})
                 skipped += 1
+                logger.info("[import %s] row %s SKIP (%s) — emp_code too long: %r",
+                            imp_id, row_idx, full_name, emp_code)
                 continue
 
             # Compliance fields — blank out any field that's too long, still import the row
@@ -376,6 +415,16 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 row_warns.append(f"IFSC cleared ({len(ifsc_val)} chars > max 11)"); ifsc_val = ""
             if len(tds_val) > 30:
                 row_warns.append(f"TDS cleared ({len(tds_val)} chars > max 30)"); tds_val = ""
+
+            if row_warns:
+                logger.warning("[import %s] row %s (%s) — field(s) cleared: %s",
+                               imp_id, row_idx, full_name, "; ".join(row_warns))
+
+            # Per-row parsed values (DEBUG level — enable verbose logging to see these)
+            logger.debug("[import %s] row %s parsed: emp_code=%r phone=%r uan=%r esic=%r "
+                         "aadhar=%r pan=%r bank=%r ifsc=%r tds=%r site=%s",
+                         imp_id, row_idx, emp_code, phone, uan_val, esic_val, aadhar_val,
+                         pan_val, bank_val, ifsc_val, tds_val, getattr(site, "id", None))
 
             # -- UPSERT: find existing employee by emp_code or phone --
             emp = None
@@ -404,6 +453,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                     if tds_val:    emp.tds          = tds_val;    update_fields.append("tds")
                     emp.save(update_fields=update_fields)
                     updated += 1
+                    logger.info("[import %s] row %s UPDATED id=%s (%s) — fields=%s",
+                                imp_id, row_idx, emp.id, full_name,
+                                [f for f in update_fields if f not in
+                                 ("full_name", "designation", "date_joined", "status")] or "core only")
                     if row_warns:
                         warnings.append({"row": row_idx, "name": full_name, "warnings": row_warns})
                     # Ensure the user account is linked
@@ -442,13 +495,21 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                             full_name=full_name, role="employee", employee=emp,
                         )
                     created += 1
+                    logger.info("[import %s] row %s CREATED id=%s (%s) — emp_code=%s phone=%s",
+                                imp_id, row_idx, emp.id, full_name, emp_code, phone)
                     if row_warns:
                         warnings.append({"row": row_idx, "name": full_name, "warnings": row_warns})
             except Exception as e:
                 errors.append({"row": row_idx, "name": full_name, "error": str(e)})
                 skipped += 1
+                logger.error("[import %s] row %s ERROR (%s) — %s\n%s",
+                             imp_id, row_idx, full_name, e, traceback.format_exc())
 
-        return Response({"created": created, "updated": updated, "skipped": skipped, "errors": errors, "warnings": warnings})
+        elapsed = time.time() - t_start
+        logger.info("[import %s] DONE in %.2fs — created=%s updated=%s skipped=%s warnings=%s",
+                    imp_id, elapsed, created, updated, skipped, len(warnings))
+        return Response({"created": created, "updated": updated, "skipped": skipped,
+                         "errors": errors, "warnings": warnings})
 
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request):

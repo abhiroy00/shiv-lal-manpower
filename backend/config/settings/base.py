@@ -120,3 +120,37 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Kolkata"
+
+# ── Logging ───────────────────────────────────────────────────────────────
+# Console handler so logs are captured by gunicorn / docker logs.
+# Set IMPORT_LOG_LEVEL=DEBUG (env var) to see per-row parsed values during
+# an employee bulk import; default INFO shows start/summary + each row outcome.
+IMPORT_LOG_LEVEL = config("IMPORT_LOG_LEVEL", default="INFO")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+    "loggers": {
+        "employees.import": {
+            "handlers": ["console"],
+            "level": IMPORT_LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
