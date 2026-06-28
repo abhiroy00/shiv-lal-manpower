@@ -3,6 +3,7 @@ import {
   useCreateEmployeeMutation,
   useUpdateEmployeeMutation,
   useResetEmployeePasswordMutation,
+  useCreateEmployeeLoginMutation,
   useGetEmployeeDocumentsQuery,
   useUploadEmployeeDocumentMutation,
   useDeleteEmployeeDocumentMutation,
@@ -78,9 +79,10 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
   const { data: salaryData } = useGetSalaryStructureQuery(employee?.id, { skip: !isEdit || !employee?.id });
   const { data: docs = [] } = useGetEmployeeDocumentsQuery(employee?.id, { skip: !isEdit || !employee?.id });
 
-  const [createEmployee, { isLoading: creating }] = useCreateEmployeeMutation();
-  const [updateEmployee, { isLoading: updating }] = useUpdateEmployeeMutation();
-  const [resetPassword, { isLoading: resetting }] = useResetEmployeePasswordMutation();
+  const [createEmployee,  { isLoading: creating }]     = useCreateEmployeeMutation();
+  const [updateEmployee,  { isLoading: updating }]     = useUpdateEmployeeMutation();
+  const [resetPassword,   { isLoading: resetting }]    = useResetEmployeePasswordMutation();
+  const [createLogin,     { isLoading: creatingLogin }] = useCreateEmployeeLoginMutation();
   const [upsertSalary] = useUpsertSalaryStructureMutation();
   const [uploadDoc] = useUploadEmployeeDocumentMutation();
   const [deleteDoc] = useDeleteEmployeeDocumentMutation();
@@ -237,6 +239,15 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
       const result = await resetPassword(employee.id).unwrap();
       setCredentials({ phone: result.phone, default_password: result.default_password });
     } catch { /* ignore */ }
+  };
+
+  const handleCreateLogin = async () => {
+    try {
+      const result = await createLogin(employee.id).unwrap();
+      setCredentials({ phone: result.phone, default_password: result.default_password });
+    } catch (err) {
+      alert(err?.data?.detail || "Failed to create login. Please try again.");
+    }
   };
 
   const MAX_DOC_SIZE = 20 * 1024 * 1024; // 20 MB
@@ -698,6 +709,11 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
                 {resetting ? "Resetting…" : "Reset Password"}
               </button>
             )}
+            {isEdit && !employee?.has_login && (
+              <button style={S.createLoginBtn} onClick={handleCreateLogin} disabled={creatingLogin}>
+                {creatingLogin ? "Creating…" : "Create App Login"}
+              </button>
+            )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {tab > 0 && (
@@ -807,6 +823,10 @@ const S = {
   resetBtn: {
     padding: "9px 14px", borderRadius: 9, border: "1px solid #1E3563",
     background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#1E3563",
+  },
+  createLoginBtn: {
+    padding: "9px 14px", borderRadius: 9, border: "1px solid #15966A",
+    background: "#E1F4EC", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#15966A",
   },
   prevBtn: {
     padding: "9px 16px", borderRadius: 9, border: "1px solid #E2E7F0",

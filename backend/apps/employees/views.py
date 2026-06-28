@@ -16,7 +16,7 @@ from apps.common.permissions import IsAdminHR
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
-    queryset = Employee.objects.select_related("site__district__state").all()
+    queryset = Employee.objects.select_related("site__district__state", "user_account").all()
     permission_classes = [IsAuthenticated]
     filterset_class = EmployeeFilter
     search_fields = ["emp_code", "full_name", "phone", "designation"]
@@ -70,6 +70,45 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             "phone": employee.phone,
             "default_password": employee.phone,
         })
+
+    @action(detail=True, methods=["post"], url_path="create-login",
+            permission_classes=[IsAdminHR])
+    def create_login(self, request, pk=None):
+        """Create (or re-link) a mobile app login for an employee who doesn't have one."""
+        employee = self.get_object()
+        from apps.accounts.models import User
+        try:
+            if employee.user_account is not None:
+                return Response({"detail": "This employee already has a login. Use Reset Password instead."}, status=400)
+        except Exception:
+            pass  # No account exists — proceed
+
+        existing = User.objects.filter(phone=employee.phone).first()
+        if existing:
+            # User with this phone exists but employee FK is NULL (e.g. old account after re-import)
+            if existing.employee_id is not None and existing.employee_id != employee.id:
+                return Response(
+                    {"detail": f"Phone {employee.phone} is already linked to a different employee account."},
+                    status=400,
+                )
+            existing.employee = employee
+            existing.role = "employee"
+            existing.set_password(employee.phone)
+            existing.password_changed_at = None
+            existing.save()
+        else:
+            User.objects.create_user(
+                phone=employee.phone,
+                password=employee.phone,
+                full_name=employee.full_name,
+                role="employee",
+                employee=employee,
+            )
+        return Response({
+            "detail": "Login created successfully.",
+            "phone": employee.phone,
+            "default_password": employee.phone,
+        }, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="transfer")
     def transfer(self, request, pk=None):
@@ -285,6 +324,34 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
             status_val = STATUS_MAP.get(cell_str(row_idx, "Status"), "active")
 
+            # Validate field lengths before hitting the DB
+            uan_val          = cell_str(row_idx, "UAN")
+            esic_val         = cell_str(row_idx, "ESIC No")
+            aadhar_val       = cell_str(row_idx, "Aadhar")
+            pan_val          = cell_str(row_idx, "PAN")
+            bank_val         = cell_str(row_idx, "Bank Account")
+            ifsc_val         = cell_str(row_idx, "IFSC")
+
+            LENGTH_CHECKS = [
+                (ifsc_val,   11, "IFSC"),
+                (pan_val,    10, "PAN"),
+                (aadhar_val, 12, "Aadhar"),
+                (phone,      15, "Phone"),
+                (uan_val,    20, "UAN"),
+                (esic_val,   20, "ESIC No"),
+                (bank_val,   20, "Bank Account"),
+                (emp_code,   20, "Emp Code"),
+            ]
+            length_error = next(
+                (f"{label} too long ({len(val)} chars, max {limit})"
+                 for val, limit, label in LENGTH_CHECKS if len(val) > limit),
+                None,
+            )
+            if length_error:
+                errors.append({"row": row_idx, "name": full_name, "error": length_error})
+                skipped += 1
+                continue
+
             try:
                 emp = Employee.objects.create(
                     emp_code=emp_code,
@@ -294,14 +361,21 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                     site=site,
                     date_joined=date_joined,
                     status=status_val,
-                    uan=cell_str(row_idx, "UAN"),
-                    esic_no=cell_str(row_idx, "ESIC No"),
-                    aadhar=cell_str(row_idx, "Aadhar"),
-                    pan=cell_str(row_idx, "PAN"),
-                    bank_account=cell_str(row_idx, "Bank Account"),
-                    ifsc=cell_str(row_idx, "IFSC"),
+                    uan=uan_val,
+                    esic_no=esic_val,
+                    aadhar=aadhar_val,
+                    pan=pan_val,
+                    bank_account=bank_val,
+                    ifsc=ifsc_val,
                 )
-                if not User.objects.filter(phone=phone).exists():
+                existing_user = User.objects.filter(phone=phone).first()
+                if existing_user:
+                    # Re-link unlinked account (e.g. left over from a deleted employee)
+                    if not existing_user.employee_id:
+                        existing_user.employee = emp
+                        existing_user.role = "employee"
+                        existing_user.save(update_fields=["employee", "role"])
+                else:
                     User.objects.create_user(
                         phone=phone, password=phone,
                         full_name=full_name, role="employee", employee=emp,
