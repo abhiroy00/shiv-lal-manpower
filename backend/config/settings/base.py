@@ -122,21 +122,14 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Kolkata"
 
 # ── Email (Google SMTP for password reset, notifications) ───────────────────
-# In dev, default is the console backend (emails print to the terminal).
-# In prod, set EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend in
-# .env.prod along with the Gmail credentials below.
 EMAIL_BACKEND       = config("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST          = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT          = config("EMAIL_PORT", default=587, cast=int)
 EMAIL_USE_TLS       = config("EMAIL_USE_TLS", default=True, cast=bool)
 EMAIL_HOST_USER     = config("EMAIL_HOST_USER", default="")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")  # Gmail App Password, NOT your login password
-DEFAULT_FROM_EMAIL  = config("DEFAULT_FROM_EMAIL", default="Shiv Lal Manpower <no-reply@shivlalmanpower.com>")
-
-# Base URL of the admin web app — used to build password-reset links in emails.
-FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
-
-# Password-reset link validity (seconds). Default 2 hours.
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL  = config("DEFAULT_FROM_EMAIL", default="Shiv Lal Manpower <shivhtl2@gmail.com>")
+FRONTEND_URL        = config("FRONTEND_URL", default="http://localhost:5173")
 PASSWORD_RESET_TIMEOUT = config("PASSWORD_RESET_TIMEOUT", default=2 * 60 * 60, cast=int)
 
 # ── Logging ───────────────────────────────────────────────────────────────
