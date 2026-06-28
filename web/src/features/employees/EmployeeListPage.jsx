@@ -364,6 +364,18 @@ export default function EmployeeListPage() {
                     ))}
                   </div>
                 )}
+                {importResult.warnings?.length > 0 && (
+                  <div style={{ ...S.errorList, borderColor: "#F5A623", marginTop: 10 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6, color: "#B97309" }}>
+                      ⚠ Field warnings (employees were still created):
+                    </div>
+                    {importResult.warnings.map((w, i) => (
+                      <div key={i} style={{ ...S.errorRow, color: "#8A5500" }}>
+                        <span style={{ fontWeight: 600 }}>Row {w.row} – {w.name}:</span> {w.warnings.join(" | ")}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {importResult.created === 0 && importResult.skipped === 0 && (
                   <div style={{ color: "#9AA6BF", fontSize: 13 }}>No data rows found in the file.</div>
                 )}

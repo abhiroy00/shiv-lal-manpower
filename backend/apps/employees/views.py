@@ -157,7 +157,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             ("Emp Code", 14), ("Full Name", 22), ("Designation", 20), ("Phone", 14),
             ("State", 18), ("District", 18), ("Site", 24), ("Date Joined", 14), ("Status", 12),
             ("UAN", 16), ("ESIC No", 16), ("Aadhar", 15), ("PAN", 13),
-            ("Bank Account", 20), ("IFSC", 13),
+            ("Bank Account", 20), ("IFSC", 13), ("TDS", 14),
         ]
         ws.row_dimensions[1].height = 28
         for col, (label, width) in enumerate(HEADERS, 1):
@@ -167,7 +167,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
         # Sample row
         sample = ["", "John Doe", "Security Guard", "9876543210", "Jharkhand", "Deoghar",
-                  "DEOGHAR COLLEGE DEOGHAR", "2024-01-15", "active", "", "", "", "", "", ""]
+                  "DEOGHAR COLLEGE DEOGHAR", "2024-01-15", "active", "", "", "", "", "", "", ""]
         for col, val in enumerate(sample, 1):
             c = ws.cell(2, col, val); c.border = bdr
 
@@ -187,7 +187,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             ["Site", "Optional — Site/Office name. Best matched with State + District."],
             ["Date Joined", "REQUIRED — format: YYYY-MM-DD (e.g. 2024-01-15)"],
             ["Status", "Optional — active / on_leave / inactive (default: active)"],
-            ["UAN / ESIC No / Aadhar / PAN / Bank Account / IFSC", "All optional"],
+            ["UAN / ESIC No / Aadhar / PAN / Bank Account / IFSC / TDS", "All optional"],
+            ["", ""],
+            ["IMPORTANT — numeric fields", "Format Aadhar, UAN, ESIC No, Bank Account cells as TEXT in Excel before entering numbers. "
+             "Otherwise Excel stores them as floating-point (e.g. 290909953973.0) which adds a decimal and may fail validation."],
             ["", ""],
             ["NOTE", "Delete the sample row (row 2) before importing your data."],
         ]
@@ -236,7 +239,15 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             if idx is None:
                 return ""
             v = ws.cell(row, idx + 1).value
-            return "" if v is None else str(v).strip()
+            if v is None:
+                return ""
+            # Excel stores every numeric cell as a Python float (e.g. 290909953973.0).
+            # str(float) gives "290909953973.0" which is 14 chars — breaks the 12-char
+            # Aadhar length check and silently skips the whole row.  Convert whole-number
+            # floats to int first so we get the clean string "290909953973".
+            if isinstance(v, float) and v.is_integer():
+                return str(int(v))
+            return str(v).strip()
 
         def cell_date(row, name):
             idx = col.get(name)
@@ -273,6 +284,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         created = 0
         skipped = 0
         errors = []
+        warnings = []
 
         for row_idx in range(2, ws.max_row + 1):
             full_name = cell_str(row_idx, "Full Name")
@@ -324,33 +336,45 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
             status_val = STATUS_MAP.get(cell_str(row_idx, "Status"), "active")
 
-            # Validate field lengths before hitting the DB
-            uan_val          = cell_str(row_idx, "UAN")
-            esic_val         = cell_str(row_idx, "ESIC No")
-            aadhar_val       = cell_str(row_idx, "Aadhar")
-            pan_val          = cell_str(row_idx, "PAN")
-            bank_val         = cell_str(row_idx, "Bank Account")
-            ifsc_val         = cell_str(row_idx, "IFSC")
+            # Read compliance / banking fields
+            uan_val    = cell_str(row_idx, "UAN")
+            esic_val   = cell_str(row_idx, "ESIC No")
+            aadhar_val = cell_str(row_idx, "Aadhar")
+            pan_val    = cell_str(row_idx, "PAN")
+            bank_val   = cell_str(row_idx, "Bank Account")
+            ifsc_val   = cell_str(row_idx, "IFSC")
+            tds_val    = cell_str(row_idx, "TDS")
 
-            LENGTH_CHECKS = [
-                (ifsc_val,   11, "IFSC"),
-                (pan_val,    10, "PAN"),
-                (aadhar_val, 12, "Aadhar"),
-                (phone,      15, "Phone"),
-                (uan_val,    20, "UAN"),
-                (esic_val,   20, "ESIC No"),
-                (bank_val,   20, "Bank Account"),
-                (emp_code,   20, "Emp Code"),
-            ]
-            length_error = next(
-                (f"{label} too long ({len(val)} chars, max {limit})"
-                 for val, limit, label in LENGTH_CHECKS if len(val) > limit),
-                None,
-            )
-            if length_error:
-                errors.append({"row": row_idx, "name": full_name, "error": length_error})
+            # Critical identity fields — skip the whole row if these are invalid
+            if len(phone) > 15:
+                errors.append({"row": row_idx, "name": full_name,
+                                "error": f"Phone too long ({len(phone)} chars, max 15)"})
                 skipped += 1
                 continue
+            if len(emp_code) > 20:
+                errors.append({"row": row_idx, "name": full_name,
+                                "error": f"Emp code too long ({len(emp_code)} chars, max 20)"})
+                skipped += 1
+                continue
+
+            # Compliance fields — blank out any field that's too long, still import the row
+            # (common cause: IFSC typo with 12 chars, Aadhar as float "290909953973.0" → fixed
+            # by cell_str, but kept here as a safety net for bad data)
+            row_warns = []
+            if len(uan_val) > 20:
+                row_warns.append(f"UAN cleared ({len(uan_val)} chars > max 20)"); uan_val = ""
+            if len(esic_val) > 20:
+                row_warns.append(f"ESIC No cleared ({len(esic_val)} chars > max 20)"); esic_val = ""
+            if len(aadhar_val) > 12:
+                row_warns.append(f"Aadhar cleared ({len(aadhar_val)} chars > max 12)"); aadhar_val = ""
+            if len(pan_val) > 10:
+                row_warns.append(f"PAN cleared ({len(pan_val)} chars > max 10)"); pan_val = ""
+            if len(bank_val) > 20:
+                row_warns.append(f"Bank Account cleared ({len(bank_val)} chars > max 20)"); bank_val = ""
+            if len(ifsc_val) > 11:
+                row_warns.append(f"IFSC cleared ({len(ifsc_val)} chars > max 11)"); ifsc_val = ""
+            if len(tds_val) > 30:
+                row_warns.append(f"TDS cleared ({len(tds_val)} chars > max 30)"); tds_val = ""
 
             try:
                 emp = Employee.objects.create(
@@ -367,6 +391,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                     pan=pan_val,
                     bank_account=bank_val,
                     ifsc=ifsc_val,
+                    tds=tds_val,
                 )
                 existing_user = User.objects.filter(phone=phone).first()
                 if existing_user:
@@ -381,6 +406,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                         full_name=full_name, role="employee", employee=emp,
                     )
                 created += 1
+                if row_warns:
+                    warnings.append({"row": row_idx, "name": full_name, "warnings": row_warns})
             except IntegrityError as e:
                 msg = str(e)
                 if "phone" in msg:
@@ -394,7 +421,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 errors.append({"row": row_idx, "name": full_name, "error": str(e)})
                 skipped += 1
 
-        return Response({"created": created, "skipped": skipped, "errors": errors})
+        return Response({"created": created, "skipped": skipped, "errors": errors, "warnings": warnings})
 
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request):
