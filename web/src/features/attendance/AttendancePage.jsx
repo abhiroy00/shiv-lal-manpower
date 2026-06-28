@@ -117,7 +117,7 @@ export default function AttendancePage() {
     }
   };
 
-  const colCount = isAdmin ? 9 : 8;
+  const colCount = isAdmin ? 8 : 7;
 
   const kpis = [
     { label: "Present Today", value: summary?.present      ?? "—" },
@@ -197,7 +197,7 @@ export default function AttendancePage() {
                       disabled={selfieCount === 0} title="Select all selfies on this date" />
                   </th>
                 )}
-                {["Employee", "Selfie", "Site", "Check-in", "Check-out", "GPS", "Geofence", "Status"].map((h) => (
+                {["Employee", "Selfie", "Site", "Check-in", "Check-out", "GPS", "Geofence"].map((h) => (
                   <th key={h} style={S.th}>{h}</th>
                 ))}
               </tr>
@@ -244,11 +244,6 @@ export default function AttendancePage() {
                     <td style={S.td}>
                       <span style={{ ...S.pill, background: r.geofence_ok ? "#E1F4EC" : "#FBE6E5", color: r.geofence_ok ? "#15966A" : "#D2453F" }}>
                         {r.geofence_ok ? "✓ OK" : "⚠ Outside"}
-                      </span>
-                    </td>
-                    <td style={S.td}>
-                      <span style={{ ...S.pill, background: sc.bg, color: sc.color }}>
-                        {r.status === "review" ? "Under Review" : r.status}
                       </span>
                     </td>
                   </tr>
