@@ -342,10 +342,17 @@ export default function EmployeeListPage() {
             ) : (
               <>
                 <div style={S.modalTitle}>Import Complete</div>
-                <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-                  <div style={{ ...S.resultBadge, background: "#E1F4EC", color: "#15966A" }}>
-                    ✓ {importResult.created} employee{importResult.created !== 1 ? "s" : ""} created
-                  </div>
+                <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                  {importResult.created > 0 && (
+                    <div style={{ ...S.resultBadge, background: "#E1F4EC", color: "#15966A" }}>
+                      ✓ {importResult.created} created
+                    </div>
+                  )}
+                  {importResult.updated > 0 && (
+                    <div style={{ ...S.resultBadge, background: "#E3EEF9", color: "#1565C0" }}>
+                      ↻ {importResult.updated} updated
+                    </div>
+                  )}
                   {importResult.skipped > 0 && (
                     <div style={{ ...S.resultBadge, background: "#FBE6E5", color: "#D2453F" }}>
                       ✕ {importResult.skipped} skipped
@@ -376,7 +383,7 @@ export default function EmployeeListPage() {
                     ))}
                   </div>
                 )}
-                {importResult.created === 0 && importResult.skipped === 0 && (
+                {importResult.created === 0 && (importResult.updated ?? 0) === 0 && importResult.skipped === 0 && (
                   <div style={{ color: "#9AA6BF", fontSize: 13 }}>No data rows found in the file.</div>
                 )}
               </>

@@ -282,6 +282,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 max_num = max(max_num, int(m.group()))
 
         created = 0
+        updated = 0
         skipped = 0
         errors = []
         warnings = []
@@ -376,52 +377,78 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             if len(tds_val) > 30:
                 row_warns.append(f"TDS cleared ({len(tds_val)} chars > max 30)"); tds_val = ""
 
+            # -- UPSERT: find existing employee by emp_code or phone --
+            emp = None
+            if emp_code:
+                emp = Employee.objects.filter(emp_code__iexact=emp_code).first()
+            if emp is None:
+                emp = Employee.objects.filter(phone=phone).first()
+
             try:
-                emp = Employee.objects.create(
-                    emp_code=emp_code,
-                    full_name=full_name,
-                    phone=phone,
-                    designation=designation,
-                    site=site,
-                    date_joined=date_joined,
-                    status=status_val,
-                    uan=uan_val,
-                    esic_no=esic_val,
-                    aadhar=aadhar_val,
-                    pan=pan_val,
-                    bank_account=bank_val,
-                    ifsc=ifsc_val,
-                    tds=tds_val,
-                )
-                existing_user = User.objects.filter(phone=phone).first()
-                if existing_user:
-                    # Re-link unlinked account (e.g. left over from a deleted employee)
-                    if not existing_user.employee_id:
+                if emp is not None:
+                    # PATCH — update all non-empty fields from the sheet
+                    update_fields = ["full_name", "designation", "date_joined", "status"]
+                    emp.full_name   = full_name
+                    emp.designation = designation
+                    emp.date_joined = date_joined
+                    emp.status      = status_val
+                    if site is not None:
+                        emp.site = site; update_fields.append("site")
+                    # Only overwrite compliance fields if the sheet provides a non-empty value
+                    if uan_val:    emp.uan          = uan_val;    update_fields.append("uan")
+                    if esic_val:   emp.esic_no      = esic_val;   update_fields.append("esic_no")
+                    if aadhar_val: emp.aadhar       = aadhar_val; update_fields.append("aadhar")
+                    if pan_val:    emp.pan          = pan_val;    update_fields.append("pan")
+                    if bank_val:   emp.bank_account = bank_val;   update_fields.append("bank_account")
+                    if ifsc_val:   emp.ifsc         = ifsc_val;   update_fields.append("ifsc")
+                    if tds_val:    emp.tds          = tds_val;    update_fields.append("tds")
+                    emp.save(update_fields=update_fields)
+                    updated += 1
+                    if row_warns:
+                        warnings.append({"row": row_idx, "name": full_name, "warnings": row_warns})
+                    # Ensure the user account is linked
+                    existing_user = User.objects.filter(phone=emp.phone).first()
+                    if existing_user and not existing_user.employee_id:
                         existing_user.employee = emp
                         existing_user.role = "employee"
                         existing_user.save(update_fields=["employee", "role"])
                 else:
-                    User.objects.create_user(
-                        phone=phone, password=phone,
-                        full_name=full_name, role="employee", employee=emp,
+                    # CREATE new employee
+                    emp = Employee.objects.create(
+                        emp_code=emp_code,
+                        full_name=full_name,
+                        phone=phone,
+                        designation=designation,
+                        site=site,
+                        date_joined=date_joined,
+                        status=status_val,
+                        uan=uan_val,
+                        esic_no=esic_val,
+                        aadhar=aadhar_val,
+                        pan=pan_val,
+                        bank_account=bank_val,
+                        ifsc=ifsc_val,
+                        tds=tds_val,
                     )
-                created += 1
-                if row_warns:
-                    warnings.append({"row": row_idx, "name": full_name, "warnings": row_warns})
-            except IntegrityError as e:
-                msg = str(e)
-                if "phone" in msg:
-                    errors.append({"row": row_idx, "name": full_name, "error": f"Phone {phone} already exists"})
-                elif "emp_code" in msg:
-                    errors.append({"row": row_idx, "name": full_name, "error": f"Emp code {emp_code} already taken"})
-                else:
-                    errors.append({"row": row_idx, "name": full_name, "error": "Duplicate entry"})
-                skipped += 1
+                    existing_user = User.objects.filter(phone=phone).first()
+                    if existing_user:
+                        if not existing_user.employee_id:
+                            existing_user.employee = emp
+                            existing_user.role = "employee"
+                            existing_user.save(update_fields=["employee", "role"])
+                    else:
+                        User.objects.create_user(
+                            phone=phone, password=phone,
+                            full_name=full_name, role="employee", employee=emp,
+                        )
+                    created += 1
+                    if row_warns:
+                        warnings.append({"row": row_idx, "name": full_name, "warnings": row_warns})
             except Exception as e:
                 errors.append({"row": row_idx, "name": full_name, "error": str(e)})
                 skipped += 1
 
-        return Response({"created": created, "skipped": skipped, "errors": errors, "warnings": warnings})
+        return Response({"created": created, "updated": updated, "skipped": skipped, "errors": errors, "warnings": warnings})
 
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request):
