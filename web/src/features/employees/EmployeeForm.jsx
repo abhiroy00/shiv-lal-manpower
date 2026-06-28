@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import {
+  useGetEmployeeQuery,
   useCreateEmployeeMutation,
   useUpdateEmployeeMutation,
   useResetEmployeePasswordMutation,
@@ -76,6 +77,7 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
       ? sites.filter((s) => String(s.district_state_id) === String(selectedState))
       : sites;
 
+  const { data: fullEmployee, isLoading: loadingDetail } = useGetEmployeeQuery(employee?.id, { skip: !isEdit || !employee?.id });
   const { data: salaryData } = useGetSalaryStructureQuery(employee?.id, { skip: !isEdit || !employee?.id });
   const { data: docs = [] } = useGetEmployeeDocumentsQuery(employee?.id, { skip: !isEdit || !employee?.id });
 
@@ -126,6 +128,28 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
     setTab(0);
   }, [employee]);
 
+  // The list row (passed in as `employee`) only carries summary fields — the
+  // compliance & banking fields (uan, esic_no, aadhar, pan, bank_account, ifsc,
+  // tds, date_of_birth, address) come from the full detail endpoint. Merge them
+  // in once loaded, otherwise the form shows them blank and a Save would wipe
+  // the real values in the database.
+  useEffect(() => {
+    if (!isEdit || !fullEmployee) return;
+    setForm((f) => ({
+      ...f,
+      site:          fullEmployee.site ?? f.site,
+      date_of_birth: fullEmployee.date_of_birth || "",
+      address:       fullEmployee.address        || "",
+      uan:           fullEmployee.uan            || "",
+      esic_no:       fullEmployee.esic_no        || "",
+      aadhar:        fullEmployee.aadhar         || "",
+      pan:           fullEmployee.pan            || "",
+      bank_account:  fullEmployee.bank_account   || "",
+      ifsc:          fullEmployee.ifsc           || "",
+      tds:           fullEmployee.tds            || "",
+    }));
+  }, [isEdit, fullEmployee]);
+
   // Pre-populate state/district when editing (needs sites to be loaded)
   useEffect(() => {
     if (!isEdit || !form.site || !sites.length) return;
@@ -169,6 +193,11 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
   };
 
   const handleSubmit = async () => {
+    // In edit mode, never submit until the full record (compliance/banking
+    // fields) has loaded — otherwise a PATCH with empty strings would wipe
+    // existing data that the list row never carried.
+    if (isEdit && loadingDetail) return;
+
     const e = validate();
     if (Object.keys(e).length) {
       setErrors(e);
@@ -726,8 +755,8 @@ export default function EmployeeForm({ employee, onClose, initialTab = 0 }) {
             {/* Salary tab: Save + Documents shortcut */}
             {tab === LAST_FORM_TAB && (
               <>
-                <button style={S.saveBtn} onClick={handleSubmit} disabled={saving}>
-                  {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Employee"}
+                <button style={S.saveBtn} onClick={handleSubmit} disabled={saving || (isEdit && loadingDetail)}>
+                  {saving ? "Saving…" : isEdit && loadingDetail ? "Loading…" : isEdit ? "Save Changes" : "Add Employee"}
                 </button>
                 <button style={S.nextBtn} onClick={() => setTab(5)}>Documents →</button>
               </>
