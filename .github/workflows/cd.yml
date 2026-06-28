@@ -144,6 +144,8 @@ jobs:
 
             echo "==> Running migrations ..."
             docker compose -f docker-compose.prod.yml exec -T api \
+              uv run python manage.py makemigrations --noinput
+            docker compose -f docker-compose.prod.yml exec -T api \
               uv run python manage.py migrate --noinput
 
             echo "==> Collecting static files ..."
