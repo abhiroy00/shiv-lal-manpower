@@ -122,6 +122,32 @@ export default function AttendanceRegisterPage() {
     setShowBulkFill(true);
   };
 
+  const handleQuickPresent = async () => {
+    const monthName = MONTHS[month - 1];
+    const wdCount = countWorkingDays(
+      `${year}-${pad(month)}-01`,
+      new Date(year, month, 0).toISOString().split("T")[0],
+    );
+    const confirmed = window.confirm(
+      `Mark ALL active employees as Present for every working day in ${monthName} ${year}?\n\n` +
+      `(${wdCount} working days — Sundays excluded)\n\nThis will overwrite any existing records for that period.`
+    );
+    if (!confirmed) return;
+    try {
+      const res = await bulkFill({
+        from_date:    `${year}-${pad(month)}-01`,
+        to_date:      new Date(year, month, 0).toISOString().split("T")[0],
+        status:       "present",
+        employee_ids: [],   // all active
+        overwrite:    true,
+      }).unwrap();
+      refetch();
+      alert(`✓ Done! ${res.created} records created (${res.employees} employees × ${res.days} working days).`);
+    } catch (e) {
+      alert(e?.data?.detail || "Failed. Please try again.");
+    }
+  };
+
   const workingDaysEstimate = countWorkingDays(bulkFrom, bulkTo);
   const empCountEstimate    = bulkScope === "filter" ? employees.length : "all active";
 
@@ -203,6 +229,10 @@ export default function AttendanceRegisterPage() {
           </div>
           {viewMode === "register" && (
             <>
+              <button style={S.quickPresentBtn} onClick={handleQuickPresent} disabled={bulkFilling || loading}
+                title={`Mark all employees Present for ${MONTHS[month - 1]} ${year} in one click`}>
+                {bulkFilling ? "Filling…" : `✓ All Present — ${MONTHS[month - 1]}`}
+              </button>
               <button style={S.bulkFillBtn} onClick={openBulkFill}>
                 ✏️ Bulk Fill
               </button>
@@ -510,8 +540,9 @@ const S = {
   pageHead:    { display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 },
   h1:          { fontFamily: "Archivo", fontSize: 22, fontWeight: 700, color: "#0F1E3D" },
   sub:         { fontSize: 13, color: "#6B7793", marginTop: 3 },
-  exportBtn:   { padding: "9px 16px", borderRadius: 9, border: 0, background: "#1E3563", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" },
-  bulkFillBtn: { padding: "9px 16px", borderRadius: 9, border: "1px solid #E2E7F0", background: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer", color: "#1E3563" },
+  exportBtn:       { padding: "9px 16px", borderRadius: 9, border: 0, background: "#1E3563", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" },
+  bulkFillBtn:     { padding: "9px 16px", borderRadius: 9, border: "1px solid #E2E7F0", background: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer", color: "#1E3563" },
+  quickPresentBtn: { padding: "9px 16px", borderRadius: 9, border: 0, background: "#15966A", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" },
   viewToggle:  { display: "flex", border: "1px solid #E2E7F0", borderRadius: 9, overflow: "hidden" },
   toggleBtn:   { padding: "8px 14px", border: 0, background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#6B7793" },
   toggleActive:{ background: "#1E3563", color: "#fff" },
