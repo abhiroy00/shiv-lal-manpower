@@ -280,17 +280,17 @@ def generate_payslip_pdf(payslip):
         if da > 0:
             earn_rows.append(("Dearness Allowance", _inr(da)))
         earn_rows += [
-            ("EPF – Employer (12% of Basic)",    _inr(pf_er)),
-            ("ESIC – Employer (3.25% of Basic)", _inr(esi_er)),
-            ("Other (8.33% of Basic)",           _inr(bonus)),
+            ("EPF – Employer (12%)",    _inr(pf_er)),
+            ("ESIC – Employer (3.25%)", _inr(esi_er)),
+            ("Other (8.33%)",           _inr(bonus)),
         ]
 
         ded_rows = [
-            ("EPF – Employee (12% of Basic)",      _inr(pf_emp)),
-            ("EPF – Employer (12% of Basic)",      _inr(pf_er)),
-            ("ESIC – Employee (0.75% of Basic)",   _inr(esi_emp)),
-            ("ESIC – Employer (3.25% of Basic)",   _inr(esi_er)),
-            ("Other – Accrued (8.33% of Basic)",   _inr(bonus)),
+            ("EPF – Employee (12%)",      _inr(pf_emp)),
+            ("EPF – Employer (12%)",      _inr(pf_er)),
+            ("ESIC – Employee (0.75%)",   _inr(esi_emp)),
+            ("ESIC – Employer (3.25%)",   _inr(esi_er)),
+            ("Other – (8.33%)",   _inr(bonus)),
         ]
         if other_d:
             ded_rows.append(("Other Deductions", _inr(other_d)))
@@ -311,7 +311,7 @@ def generate_payslip_pdf(payslip):
         if da > 0:
             earn_rows.append(("Dearness Allowance", _inr(da)))
 
-        ded_rows = [("TDS – Income Tax (10% of Basic)", _inr(tds_amt))]
+        ded_rows = [("TDS – Income Tax (10%)", _inr(tds_amt))]
         if other_d:
             ded_rows.append(("Other Deductions", _inr(other_d)))
 
