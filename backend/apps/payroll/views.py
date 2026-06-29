@@ -355,8 +355,8 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
             if pf_mode:
                 pf_er  = round(basic * 0.12,   2)
                 esi_er = round(basic * 0.0325,  2)
-                gross  = basic + hra + da + pf_er + esi_er   # bonus excluded from display
-                net    = round(gross - (pf_emp + pf_er + esi_emp + esi_er + other_d), 2)
+                gross  = basic + hra + da + pf_er + esi_er + bonus
+                net    = round(gross - (pf_emp + pf_er + esi_emp + esi_er + bonus + other_d), 2)
             else:
                 pf_er = esi_er = 0.0
                 gross = basic + hra + da

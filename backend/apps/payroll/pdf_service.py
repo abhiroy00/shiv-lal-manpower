@@ -268,9 +268,10 @@ def generate_payslip_pdf(payslip):
     pf_mode = bonus > 0
 
     if pf_mode:
-        # CTC Gross = Basic + HRA + DA + Employer PF + Employer ESIC (bonus excluded from display)
-        gross_ctc = basic + hra + da + pf_er + esi_er
-        total_d   = pf_emp + pf_er + esi_emp + esi_er + other_d
+        # CTC Gross = Basic + HRA + DA + Employer PF + Employer ESIC + Other
+        gross_ctc = basic + hra + da + pf_er + esi_er + bonus
+        # Gross Deduction includes Other (accrued) so Gross − Deduction = Net Pay
+        total_d   = pf_emp + pf_er + esi_emp + esi_er + bonus + other_d
 
         earn_rows = [
             ("Basic Salary",                       _inr(basic)),
@@ -281,6 +282,7 @@ def generate_payslip_pdf(payslip):
         earn_rows += [
             ("EPF – Employer (12%)",    _inr(pf_er)),
             ("ESIC – Employer (3.25%)", _inr(esi_er)),
+            ("Other",           _inr(bonus)),
         ]
 
         ded_rows = [
@@ -288,7 +290,7 @@ def generate_payslip_pdf(payslip):
             ("EPF – Employer (12%)",      _inr(pf_er)),
             ("ESIC – Employee (0.75%)",   _inr(esi_emp)),
             ("ESIC – Employer (3.25%)",   _inr(esi_er)),
-            ("TDS – Income Tax",          _inr(0)),      # always ₹0 in PF regime
+            ("Other",   _inr(bonus)),
         ]
         if other_d:
             ded_rows.append(("Other Deductions", _inr(other_d)))

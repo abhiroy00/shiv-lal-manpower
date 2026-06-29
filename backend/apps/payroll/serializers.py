@@ -17,11 +17,11 @@ def _compute_figures(payslip):
     tds     = payslip.tds
     other_d = payslip.other_deductions
 
-    if bonus > 0:                  # PF / ESIC mode — bonus excluded from display
+    if bonus > 0:                  # PF / ESIC mode
         pf_er  = (basic * Decimal("0.12")).quantize(Decimal("0.01"))
         esi_er = (basic * Decimal("0.0325")).quantize(Decimal("0.01"))
-        gross   = basic + hra + da + pf_er + esi_er
-        total_d = pf_emp + pf_er + esi_emp + esi_er + other_d
+        gross   = basic + hra + da + pf_er + esi_er + bonus
+        total_d = pf_emp + pf_er + esi_emp + esi_er + bonus + other_d
     else:                          # TDS mode
         pf_er = esi_er = Decimal("0")
         gross   = basic + hra + da
