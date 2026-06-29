@@ -22,14 +22,6 @@ export const leaveApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Leave", "Dashboard"],
     }),
-    bulkApproveLeave: build.mutation({
-      query: () => ({
-        url: "/leaves/approve-all/",
-        method: "POST",
-        body: {},
-      }),
-      invalidatesTags: ["Leave", "Dashboard"],
-    }),
   }),
 });
 
@@ -37,5 +29,4 @@ export const {
   useGetLeavesQuery,
   useApproveLeaveMutation,
   useRejectLeaveMutation,
-  useBulkApproveLeaveMutation,
 } = leaveApi;

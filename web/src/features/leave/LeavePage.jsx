@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSelector } from "react-redux";
-import { useGetLeavesQuery, useApproveLeaveMutation, useRejectLeaveMutation, useBulkApproveLeaveMutation } from "./leaveApi";
+import { useGetLeavesQuery, useApproveLeaveMutation, useRejectLeaveMutation } from "./leaveApi";
 
 const LEAVE_TYPES = {
   cl:     { label: "Casual",  color: "#1565C0", bg: "#E3EEF9" },
@@ -122,7 +122,7 @@ export default function LeavePage() {
   const [toast,          setToast]          = useState(null);
   const [approvingAll,   setApprovingAll]   = useState(false);
 
-  const [bulkApproveLeaves] = useBulkApproveLeaveMutation();
+  const [approveLeave] = useApproveLeaveMutation();
 
   const { data: raw, isLoading, refetch } = useGetLeavesQuery(
     { status: statusFilter || undefined },
@@ -159,14 +159,15 @@ export default function LeavePage() {
   };
 
   const handleApproveAll = async () => {
-    if (counts.pending === 0) return;
-    if (!window.confirm(`Approve all ${counts.pending} pending leave request(s)?`)) return;
+    const pendingLeaves = allLeaves.filter((l) => l.status === "pending");
+    if (pendingLeaves.length === 0) return;
+    if (!window.confirm(`Approve all ${pendingLeaves.length} pending leave request(s)?`)) return;
     setApprovingAll(true);
     try {
-      const res = await bulkApproveLeaves().unwrap();
-      showToast(res.detail || `${res.approved} leave(s) approved.`);
+      await Promise.all(pendingLeaves.map((l) => approveLeave({ id: l.id, note: "" }).unwrap()));
+      showToast(`${pendingLeaves.length} leave(s) approved successfully.`);
     } catch (e) {
-      showToast(e?.data?.detail || "Bulk approve failed.", false);
+      showToast(e?.data?.detail || "Some approvals failed.", false);
     } finally {
       setApprovingAll(false);
     }
