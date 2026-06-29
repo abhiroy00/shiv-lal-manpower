@@ -45,6 +45,10 @@
     "web": {
       "bundler": "metro"
     },
+    "assetBundlePatterns": [
+      "assets/**",
+      "src/assets/**"
+    ],
     "plugins": [
       "expo-camera",
       [
