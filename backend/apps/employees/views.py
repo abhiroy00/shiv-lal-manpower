@@ -161,8 +161,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         HEADERS = [
             ("Emp Code", 14), ("Full Name", 22), ("Designation", 20), ("Phone", 14),
             ("State", 18), ("District", 18), ("Site", 24), ("Date Joined", 14), ("Status", 12),
+            ("Date of Birth", 14), ("Address", 30),
             ("UAN", 16), ("ESIC No", 16), ("Aadhar", 15), ("PAN", 13),
             ("Bank Account", 20), ("IFSC", 13), ("TDS", 14),
+            ("Basic", 12), ("HRA", 10), ("DA", 10), ("Other Allowances", 16),
         ]
         ws.row_dimensions[1].height = 28
         for col, (label, width) in enumerate(HEADERS, 1):
@@ -172,7 +174,9 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
         # Sample row
         sample = ["", "John Doe", "Security Guard", "9876543210", "Jharkhand", "Deoghar",
-                  "DEOGHAR COLLEGE DEOGHAR", "2024-01-15", "active", "", "", "", "", "", "", ""]
+                  "DEOGHAR COLLEGE DEOGHAR", "2024-01-15", "active", "1995-06-20", "",
+                  "", "", "", "", "", "", "",
+                  "10365", "4146", "0", "0"]
         for col, val in enumerate(sample, 1):
             c = ws.cell(2, col, val); c.border = bdr
 
@@ -192,7 +196,13 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             ["Site", "Optional — Site/Office name. Best matched with State + District."],
             ["Date Joined", "REQUIRED — format: YYYY-MM-DD (e.g. 2024-01-15)"],
             ["Status", "Optional — active / on_leave / inactive (default: active)"],
+            ["Date of Birth", "Optional — format: YYYY-MM-DD (e.g. 1995-06-20)"],
+            ["Address", "Optional — residential address"],
             ["UAN / ESIC No / Aadhar / PAN / Bank Account / IFSC / TDS", "All optional"],
+            ["Basic", "Optional — monthly basic salary (e.g. 10365). Creates/updates salary structure."],
+            ["HRA", "Optional — House Rent Allowance (e.g. 4146)"],
+            ["DA", "Optional — Dearness Allowance (e.g. 0)"],
+            ["Other Allowances", "Optional — any other allowance (e.g. 0)"],
             ["", ""],
             ["IMPORTANT — numeric fields", "Format Aadhar, UAN, ESIC No, Bank Account cells as TEXT in Excel before entering numbers. "
              "Otherwise Excel stores them as floating-point (e.g. 290909953973.0) which adds a decimal and may fail validation."],
@@ -256,8 +266,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         # Log which columns were detected vs which the importer looks for, so a
         # header typo (e.g. "Aadhaar" vs "Aadhar") is obvious in the logs.
         EXPECTED_COLS = ["Emp Code", "Full Name", "Designation", "Phone", "State",
-                         "District", "Site", "Date Joined", "Status", "UAN",
-                         "ESIC No", "Aadhar", "PAN", "Bank Account", "IFSC", "TDS"]
+                         "District", "Site", "Date Joined", "Status",
+                         "Date of Birth", "Address",
+                         "UAN", "ESIC No", "Aadhar", "PAN", "Bank Account", "IFSC", "TDS",
+                         "Basic", "HRA", "DA", "Other Allowances"]
         missing_cols = [c for c in EXPECTED_COLS if c not in col]
         logger.info("[import %s] rows=%s headers=%s", imp_id, ws.max_row - 1, headers)
         if missing_cols:
@@ -372,6 +384,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
             status_val = STATUS_MAP.get(cell_str(row_idx, "Status"), "active")
 
+            # Read employee profile fields
+            dob_val     = cell_date(row_idx, "Date of Birth")
+            address_val = cell_str(row_idx, "Address")
+
             # Read compliance / banking fields
             uan_val    = cell_str(row_idx, "UAN")
             esic_val   = cell_str(row_idx, "ESIC No")
@@ -380,6 +396,22 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             bank_val   = cell_str(row_idx, "Bank Account")
             ifsc_val   = cell_str(row_idx, "IFSC")
             tds_val    = cell_str(row_idx, "TDS")
+
+            # Read salary fields
+            def _decimal(name):
+                from decimal import Decimal, InvalidOperation
+                v = cell_str(row_idx, name)
+                if not v:
+                    return None
+                try:
+                    return Decimal(v).quantize(Decimal("0.01"))
+                except InvalidOperation:
+                    return None
+
+            basic_val  = _decimal("Basic")
+            hra_val    = _decimal("HRA")
+            da_val     = _decimal("DA")
+            other_val  = _decimal("Other Allowances")
 
             # Critical identity fields — skip the whole row if these are invalid
             if len(phone) > 15:
@@ -443,6 +475,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                     emp.status      = status_val
                     if site is not None:
                         emp.site = site; update_fields.append("site")
+                    if dob_val is not None:
+                        emp.date_of_birth = dob_val; update_fields.append("date_of_birth")
+                    if address_val:
+                        emp.address = address_val;  update_fields.append("address")
                     # Only overwrite compliance fields if the sheet provides a non-empty value
                     if uan_val:    emp.uan          = uan_val;    update_fields.append("uan")
                     if esic_val:   emp.esic_no      = esic_val;   update_fields.append("esic_no")
@@ -475,6 +511,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                         site=site,
                         date_joined=date_joined,
                         status=status_val,
+                        date_of_birth=dob_val,
+                        address=address_val,
                         uan=uan_val,
                         esic_no=esic_val,
                         aadhar=aadhar_val,
@@ -499,6 +537,23 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                                 imp_id, row_idx, emp.id, full_name, emp_code, phone)
                     if row_warns:
                         warnings.append({"row": row_idx, "name": full_name, "warnings": row_warns})
+
+                # Upsert salary structure if any salary field was provided
+                if emp and basic_val is not None:
+                    from apps.payroll.models import SalaryStructure
+                    from decimal import Decimal as D
+                    SalaryStructure.objects.update_or_create(
+                        employee=emp,
+                        defaults={
+                            "basic":            basic_val,
+                            "hra":              hra_val   if hra_val   is not None else D("0"),
+                            "da":               da_val    if da_val    is not None else D("0"),
+                            "other_allowances": other_val if other_val is not None else D("0"),
+                        },
+                    )
+                    logger.info("[import %s] row %s salary — basic=%s hra=%s da=%s other=%s",
+                                imp_id, row_idx, basic_val, hra_val, da_val, other_val)
+
             except Exception as e:
                 errors.append({"row": row_idx, "name": full_name, "error": str(e)})
                 skipped += 1
