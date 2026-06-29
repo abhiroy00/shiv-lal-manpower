@@ -1,5 +1,52 @@
+from decimal import Decimal
 from rest_framework import serializers
 from .models import SalaryStructure, PayrollRun, Payslip
+
+
+def _compute_figures(payslip):
+    """
+    Return (gross_ctc, total_deductions, net_pay) consistent with the PDF.
+    Mirrors pdf_service.py so the web and PDF always agree.
+    """
+    basic   = payslip.basic
+    hra     = payslip.hra
+    da      = payslip.da
+    bonus   = payslip.bonus        # 8.33% of struct.basic if PF mode, else 0
+    pf_emp  = payslip.pf_employee
+    esi_emp = payslip.esi_employee
+    tds     = payslip.tds
+    other_d = payslip.other_deductions
+
+    if bonus > 0:                  # PF / ESIC mode
+        pf_er  = (basic * Decimal("0.12")).quantize(Decimal("0.01"))
+        esi_er = (basic * Decimal("0.0325")).quantize(Decimal("0.01"))
+        gross   = basic + hra + da + pf_er + esi_er + bonus
+        total_d = pf_emp + pf_er + esi_emp + esi_er + bonus + other_d
+    else:                          # TDS mode
+        pf_er = esi_er = Decimal("0")
+        gross   = basic + hra + da
+        total_d = tds + other_d
+
+    net = gross - total_d
+    return gross, total_d, net, pf_er, esi_er
+
+
+def _run_totals(run):
+    """Compute gross / deductions / net totals for a PayrollRun (one DB query)."""
+    gross = ded = net = Decimal("0")
+    for p in run.payslips.all():
+        g, d, n, _, _ = _compute_figures(p)
+        gross += g
+        ded   += d
+        net   += n
+    return {"gross": gross, "deductions": ded, "net": net}
+
+
+def _get_run_totals(run):
+    """Cache totals on the instance so all three methods share one query."""
+    if not hasattr(run, "_computed_totals"):
+        run._computed_totals = _run_totals(run)
+    return run._computed_totals
 
 
 class SalaryStructureSerializer(serializers.ModelSerializer):
@@ -14,11 +61,15 @@ class SalaryStructureSerializer(serializers.ModelSerializer):
 
 
 class PayrollRunSerializer(serializers.ModelSerializer):
-    payslip_count   = serializers.SerializerMethodField()
-    total_gross     = serializers.SerializerMethodField()
-    total_net       = serializers.SerializerMethodField()
+    payslip_count    = serializers.SerializerMethodField()
+    total_gross      = serializers.SerializerMethodField()
+    total_net        = serializers.SerializerMethodField()
     total_deductions = serializers.SerializerMethodField()
-    month_label     = serializers.SerializerMethodField()
+    month_label      = serializers.SerializerMethodField()
+    total_basic      = serializers.SerializerMethodField()
+    total_hra        = serializers.SerializerMethodField()
+    total_bonus      = serializers.SerializerMethodField()
+    total_tds        = serializers.SerializerMethodField()
 
     class Meta:
         model = PayrollRun
@@ -28,17 +79,14 @@ class PayrollRunSerializer(serializers.ModelSerializer):
     def get_payslip_count(self, obj):
         return obj.payslips.count()
 
-    total_basic   = serializers.SerializerMethodField()
-    total_hra     = serializers.SerializerMethodField()
-    total_bonus   = serializers.SerializerMethodField()
-    total_tds     = serializers.SerializerMethodField()
-
     def get_total_gross(self, obj):
-        from django.db.models import Sum
-        agg = obj.payslips.aggregate(
-            s=Sum("basic") + Sum("hra") + Sum("da") + Sum("other_allowances")
-        )
-        return float(agg["s"] or 0)
+        return float(_get_run_totals(obj)["gross"])
+
+    def get_total_net(self, obj):
+        return float(_get_run_totals(obj)["net"])
+
+    def get_total_deductions(self, obj):
+        return float(_get_run_totals(obj)["deductions"])
 
     def get_total_basic(self, obj):
         from django.db.models import Sum
@@ -56,18 +104,6 @@ class PayrollRunSerializer(serializers.ModelSerializer):
         from django.db.models import Sum
         return float(obj.payslips.aggregate(s=Sum("tds"))["s"] or 0)
 
-    def get_total_net(self, obj):
-        from django.db.models import Sum
-        agg = obj.payslips.aggregate(s=Sum("net_pay"))
-        return float(agg["s"] or 0)
-
-    def get_total_deductions(self, obj):
-        from django.db.models import Sum
-        agg = obj.payslips.aggregate(
-            s=Sum("pf_employee") + Sum("esi_employee") + Sum("tds") + Sum("other_deductions")
-        )
-        return float(agg["s"] or 0)
-
     def get_month_label(self, obj):
         import calendar
         return f"{calendar.month_name[obj.month]} {obj.year}"
@@ -81,6 +117,9 @@ class PayslipSerializer(serializers.ModelSerializer):
     bank_account  = serializers.CharField(source="employee.bank_account",read_only=True, default="")
     ifsc          = serializers.CharField(source="employee.ifsc",        read_only=True, default="")
     gross_pay     = serializers.SerializerMethodField()
+    net_pay       = serializers.SerializerMethodField()   # overrides model field
+    pf_employer   = serializers.SerializerMethodField()
+    esi_employer  = serializers.SerializerMethodField()
     run_month     = serializers.IntegerField(source="payroll_run.month", read_only=True)
     run_year      = serializers.IntegerField(source="payroll_run.year",  read_only=True)
     run_status    = serializers.CharField(source="payroll_run.run_status", read_only=True)
@@ -91,27 +130,21 @@ class PayslipSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("created_at", "updated_at")
 
-    pf_employer  = serializers.SerializerMethodField()
-    esi_employer = serializers.SerializerMethodField()
-
     def get_gross_pay(self, obj):
-        # CTC in PF/ESIC mode; employee gross in TDS mode
-        from decimal import Decimal
-        base = obj.basic + obj.hra + obj.da + obj.other_allowances + obj.bonus
-        if obj.bonus > 0:  # PF/ESIC regime
-            base += (obj.basic * Decimal("0.12") + obj.basic * Decimal("0.0325")).quantize(Decimal("0.01"))
-        return float(base)
+        gross, _, _, _, _ = _compute_figures(obj)
+        return float(gross)
+
+    def get_net_pay(self, obj):
+        _, _, net, _, _ = _compute_figures(obj)
+        return float(net)
 
     def get_pf_employer(self, obj):
-        from decimal import Decimal
-        return float((obj.basic * Decimal("0.12")).quantize(Decimal("0.01")))
+        _, _, _, pf_er, _ = _compute_figures(obj)
+        return float(pf_er)
 
     def get_esi_employer(self, obj):
-        from decimal import Decimal
-        gross = obj.basic + obj.hra + obj.da + obj.other_allowances
-        if gross <= Decimal("21000"):
-            return float((gross * Decimal("0.0325")).quantize(Decimal("0.01")))
-        return 0.0
+        _, _, _, _, esi_er = _compute_figures(obj)
+        return float(esi_er)
 
     def get_month_label(self, obj):
         import calendar
