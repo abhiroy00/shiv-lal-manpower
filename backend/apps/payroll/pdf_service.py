@@ -290,7 +290,7 @@ def generate_payslip_pdf(payslip):
             ("EPF – Employer (12%)",      _inr(pf_er)),
             ("ESIC – Employee (0.75%)",   _inr(esi_emp)),
             ("ESIC – Employer (3.25%)",   _inr(esi_er)),
-            ("Other –",   _inr(bonus)),
+            ("Other",   _inr(bonus)),
         ]
         if other_d:
             ded_rows.append(("Other Deductions", _inr(other_d)))
