@@ -153,8 +153,8 @@ def generate_payslip_pdf(payslip):
     # Logo is 1080×1350 RGBA (portrait, ratio 0.8). Display at 46×58 so it
     # fits the header height without distortion. Transparent bg shows navy.
     logo_img_w, logo_img_h = 46, 58
-    logo_col_w, qr_w = 56, 54
-    mid_w = W - 2 * MARGIN - logo_col_w - qr_w - 14
+    logo_col_w, qr_w = 64, 54   
+    mid_w = W - 2 * MARGIN - logo_col_w - qr_w - 22 
 
     logo_buf = _get_logo_buf()
     logo_cell = RLImage(logo_buf, width=logo_img_w, height=logo_img_h) \
@@ -187,16 +187,16 @@ def generate_payslip_pdf(payslip):
 
     hdr = Table(
         [[logo_cell, centre_tbl, qr_cell]],
-        colWidths=[logo_col_w, mid_w, qr_w + 6],
+        colWidths=[logo_col_w, mid_w, qr_w + 14],
     )
     hdr.setStyle(TableStyle([
         ("BACKGROUND",    (0, 0), (-1, -1), NAVY),
         ("TOPPADDING",    (0, 0), (-1, -1), 10),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-        ("LEFTPADDING",   (0, 0), (0, 0),   8),
+        ("LEFTPADDING",   (0, 0), (0, 0),   16), 
         ("LEFTPADDING",   (1, 0), (1, 0),   0),
         ("RIGHTPADDING",  (1, 0), (1, 0),   0),
-        ("RIGHTPADDING",  (-1, 0), (-1, -1), 8),
+        ("RIGHTPADDING",  (-1, 0), (-1, -1), 14),  
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
         ("LINEBELOW",     (0, 0), (-1, -1), 1.5, GOLD),
     ]))

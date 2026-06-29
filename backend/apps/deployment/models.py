@@ -5,6 +5,9 @@ from apps.common.models import TimeStampedModel
 class State(TimeStampedModel):
     name = models.CharField(max_length=80, unique=True)
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
@@ -15,6 +18,7 @@ class District(TimeStampedModel):
 
     class Meta:
         unique_together = ("state", "name")
+        ordering = ["state__name", "name"]
 
     def __str__(self):
         return f"{self.name}, {self.state.name}"
@@ -30,6 +34,9 @@ class Site(TimeStampedModel):
     geofence_radius = models.PositiveIntegerField(default=200, help_text="Radius in metres")
     sanctioned_strength = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
 
     def __str__(self):
         return f"{self.name} ({self.district})"

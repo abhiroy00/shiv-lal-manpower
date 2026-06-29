@@ -8,6 +8,9 @@ class Requisition(TimeStampedModel):
     count_required = models.PositiveSmallIntegerField()
     is_open = models.BooleanField(default=True)
 
+    class Meta:
+        ordering = ["-created_at"]
+
     def __str__(self):
         return f"{self.designation} x{self.count_required} – {self.site}"
 
@@ -29,6 +32,9 @@ class Candidate(TimeStampedModel):
     experience_years = models.PositiveSmallIntegerField(default=0)
     notes = models.TextField(blank=True)
     stage = models.CharField(max_length=12, choices=Stage.choices, default=Stage.APPLIED)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.full_name} – {self.stage}"

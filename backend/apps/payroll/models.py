@@ -14,6 +14,9 @@ class SalaryStructure(TimeStampedModel):
     def gross(self):
         return self.basic + self.hra + self.da + self.other_allowances
 
+    class Meta:
+        ordering = ["employee__emp_code"]
+
     def __str__(self):
         return f"{self.employee.emp_code} – ₹{self.gross()}"
 
