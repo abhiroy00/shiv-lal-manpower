@@ -24,6 +24,7 @@ class SalaryStructureViewSet(viewsets.ModelViewSet):
     queryset = SalaryStructure.objects.select_related("employee").all()
     serializer_class = SalaryStructureSerializer
     permission_classes = [IsAdminHR]
+    filterset_fields  = ["employee"]
 
     @action(detail=False, methods=["get"], url_path="template")
     def template(self, request):
