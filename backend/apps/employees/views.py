@@ -569,7 +569,9 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request):
         qs = self.filter_queryset(
-            Employee.objects.select_related("site__district__state").all()
+            Employee.objects.select_related(
+                "site__district__state", "salary_structure"
+            ).all()
         )
 
         wb = Workbook()
@@ -586,22 +588,28 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         date_align = Alignment(horizontal="center")
 
         HEADERS = [
-            ("Emp Code",     14),
-            ("Full Name",    22),
-            ("Designation",  20),
-            ("Phone",        14),
-            ("State",        14),
-            ("District",     18),
-            ("Site",         24),
-            ("Office Name",  24),
-            ("Date Joined",  14),
-            ("Status",       12),
-            ("UAN",          16),
-            ("ESIC No",      16),
-            ("Aadhar",       15),
-            ("PAN",          13),
-            ("Bank Account", 20),
-            ("IFSC",         13),
+            ("Emp Code",        14),
+            ("Full Name",       22),
+            ("Designation",     20),
+            ("Phone",           14),
+            ("Date of Birth",   14),
+            ("Address",         30),
+            ("State",           14),
+            ("District",        18),
+            ("Site",            24),
+            ("Office Name",     24),
+            ("Date Joined",     14),
+            ("Status",          12),
+            ("UAN",             16),
+            ("ESIC No",         16),
+            ("Aadhar",          15),
+            ("PAN",             13),
+            ("Bank Account",    20),
+            ("IFSC",            13),
+            ("Basic (₹)",      13),
+            ("HRA (₹)",        13),
+            ("DA (₹)",         13),
+            ("Other Allow (₹)", 16),
         ]
 
         # Header row
@@ -616,16 +624,20 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
         # Data rows
         STATUS_MAP = {"active": "Active", "on_leave": "On Leave", "inactive": "Inactive"}
+        salary_cols = {len(HEADERS) - 3, len(HEADERS) - 2, len(HEADERS) - 1, len(HEADERS)}
 
         for row_idx, emp in enumerate(qs, start=2):
             is_alt = (row_idx % 2 == 0)
             fill   = alt_fill if is_alt else None
 
+            sal = getattr(emp, "salary_structure", None)
             row_data = [
                 emp.emp_code,
                 emp.full_name,
                 emp.designation,
                 emp.phone,
+                emp.date_of_birth,
+                emp.address,
                 emp.site.district.state.name if emp.site and emp.site.district and emp.site.district.state else "",
                 emp.site.district.name  if emp.site and emp.site.district else "",
                 emp.site.name           if emp.site else "",
@@ -638,6 +650,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 emp.pan,
                 emp.bank_account,
                 emp.ifsc,
+                float(sal.basic)            if sal else "",
+                float(sal.hra)              if sal else "",
+                float(sal.da)               if sal else "",
+                float(sal.other_allowances) if sal else "",
             ]
 
             for col, value in enumerate(row_data, start=1):
@@ -648,6 +664,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 if isinstance(value, date):
                     cell.number_format = "DD-MMM-YYYY"
                     cell.alignment = date_align
+                elif col in salary_cols and isinstance(value, float):
+                    cell.number_format = '#,##0.00'
 
         # Freeze header row
         ws.freeze_panes = "A2"

@@ -304,27 +304,28 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
         bfont = Font(name="Calibri", bold=True, size=10)
 
         # Title
-        ws.merge_cells("A1:Q1")
+        ws.merge_cells("A1:P1")
         t = ws["A1"]
         t.value     = f"SALARY SHEET — {mname.upper()} {run.year} — M/S SHIV LAL MANPOWER"
         t.font      = Font(name="Calibri", bold=True, size=13, color="1E3563")
         t.alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[1].height = 26
 
-        ws.merge_cells("A2:Q2")
+        ws.merge_cells("A2:P2")
         ws["A2"].value = (
             f"Status: {run.run_status.upper()}  |  Generated: {date.today().strftime('%d %b %Y')}  |  "
-            f"Rule: Basic ≥ ₹30,000 → TDS (10%)  |  Basic < ₹30,000 → PF(12%) + ESIC(0.75%)"
+            f"Rule: Basic > ₹30,000 → TDS (10%)  |  Basic ≤ ₹30,000 → PF(12%) + ESIC(0.75%) + Bonus(8.33%)"
         )
         ws["A2"].font      = Font(name="Calibri", size=8.5, color="6B7793", italic=True)
         ws["A2"].alignment = Alignment(horizontal="center")
         ws.row_dimensions[2].height = 16
 
+        # 16 columns — other_allowances removed (dormant field, always ₹0 per policy)
         HEADERS = [
             ("Sr",              5),  ("Emp Code",    12), ("Employee Name",  26),
             ("Designation",    18),  ("Site",         18), ("Days P/W",       9),
             ("Basic (₹)",     12),  ("HRA (₹)",     10), ("DA (₹)",         10),
-            ("Other (₹)",     10),  ("Bonus (₹)",   10), ("Gross (₹)",      12),
+            ("Bonus (₹)",     11),  ("Gross CTC (₹)",13),
             ("PF Emp (₹)",    11),  ("ESIC Emp (₹)",11), ("TDS (₹)",        11),
             ("Other Ded (₹)", 11),  ("Net Pay (₹)", 13),
         ]
@@ -336,11 +337,29 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
 
         total_gross = total_pf = total_esi = total_tds = total_net = 0.0
         for ri, slip in enumerate(payslips, 4):
-            emp     = slip.employee
-            gross   = float(slip.basic + slip.hra + slip.da + slip.other_allowances)
-            is_tds  = float(slip.basic) >= float(PF_THRESHOLD)
-            alt     = PatternFill("solid", fgColor="F4F6FA") if ri % 2 == 0 else None
-            regime  = tds_f if is_tds else pf_f
+            emp    = slip.employee
+            pf_mode = float(slip.bonus) > 0   # bonus > 0 → PF/ESIC regime
+            is_tds  = not pf_mode
+            alt    = PatternFill("solid", fgColor="F4F6FA") if ri % 2 == 0 else None
+
+            basic   = float(slip.basic)
+            hra     = float(slip.hra)
+            da      = float(slip.da)
+            bonus   = float(slip.bonus)
+            pf_emp  = float(slip.pf_employee)
+            esi_emp = float(slip.esi_employee)
+            tds     = float(slip.tds)
+            other_d = float(slip.other_deductions)
+
+            if pf_mode:
+                pf_er  = round(basic * 0.12,   2)
+                esi_er = round(basic * 0.0325,  2)
+                gross  = basic + hra + da + pf_er + esi_er + bonus
+                net    = round(gross - (pf_emp + pf_er + esi_emp + esi_er + bonus + other_d), 2)
+            else:
+                pf_er = esi_er = 0.0
+                gross = basic + hra + da
+                net   = round(gross - (tds + other_d), 2)
 
             row_vals = [
                 ri - 3,
@@ -349,49 +368,47 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
                 emp.designation,
                 emp.site.name if emp.site else "",
                 f"{slip.present_days}/{slip.working_days}",
-                float(slip.basic),
-                float(slip.hra),
-                float(slip.da),
-                float(slip.other_allowances),
-                float(slip.bonus),
+                basic,
+                hra,
+                da,
+                bonus,
                 gross,
-                float(slip.pf_employee),
-                float(slip.esi_employee),
-                float(slip.tds),
-                float(slip.other_deductions),
-                float(slip.net_pay),
+                pf_emp,
+                esi_emp,
+                tds,
+                other_d,
+                net,
             ]
             for ci, val in enumerate(row_vals, 1):
                 c = ws.cell(row=ri, column=ci, value=val)
                 c.border = bdr
-                c.font   = bfont if ci in (12, 17) else cfont
+                c.font   = bfont if ci in (11, 16) else cfont
                 if alt:   c.fill = alt
                 if ci == 1: c.alignment = ctr
                 if ci >= 7:
                     c.number_format = '₹#,##0.00'
-                # Colour-code regime columns
-                if ci in (13, 14) and not is_tds:
+                if ci in (12, 13) and pf_mode:
                     c.fill = pf_f
-                if ci == 15 and is_tds:
+                if ci == 14 and is_tds:
                     c.fill = tds_f
 
             total_gross += gross
-            total_pf    += float(slip.pf_employee)
-            total_esi   += float(slip.esi_employee)
-            total_tds   += float(slip.tds)
-            total_net   += float(slip.net_pay)
+            total_pf    += pf_emp
+            total_esi   += esi_emp
+            total_tds   += tds
+            total_net   += net
 
         # Totals row
         tot = len(payslips) + 4
         ws.cell(tot, 2, "TOTAL").font = bfont
-        for ci, val in [(12, total_gross),(13, total_pf),(14, total_esi),(15, total_tds),(17, total_net)]:
+        for ci, val in [(11, total_gross),(12, total_pf),(13, total_esi),(14, total_tds),(16, total_net)]:
             c = ws.cell(tot, ci, val)
             c.font   = Font(name="Calibri", bold=True, size=10, color="15966A")
             c.number_format = '₹#,##0.00'
             c.border = bdr
 
         ws.freeze_panes = "A4"
-        ws.auto_filter.ref = f"A3:Q3"
+        ws.auto_filter.ref = f"A3:{get_column_letter(len(HEADERS))}3"
 
         buf = io.BytesIO(); wb.save(buf); buf.seek(0)
         fname = f"salary_sheet_{run.year}_{run.month:02d}.xlsx"
