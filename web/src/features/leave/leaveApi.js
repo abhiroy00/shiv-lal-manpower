@@ -22,7 +22,7 @@ export const leaveApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Leave", "Dashboard"],
     }),
-    bulkApproveLeaves: build.mutation({
+    bulkApproveLeave: build.mutation({
       query: () => ({
         url: "/leaves/approve-all/",
         method: "POST",
