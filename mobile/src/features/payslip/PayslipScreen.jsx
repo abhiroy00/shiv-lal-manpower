@@ -24,13 +24,15 @@ function fmt(val) {
 function SlipDetail({ slip, onClose }) {
   const accessToken = useSelector((s) => s.auth.accessToken);
   const [downloading, setDownloading] = useState(false);
-  const gross    = Number(slip.basic) + Number(slip.hra) + Number(slip.da) + Number(slip.other_allowances);
-  const bonus    = Number(slip.bonus || 0);
-  const tds      = Number(slip.tds   || 0);
-  const totalDed = Number(slip.pf_employee) + Number(slip.esi_employee) + tds + Number(slip.other_deductions);
-  // Employer contributions (calculated)
-  const pfEmployer  = (Number(slip.basic) * 0.12);
-  const esiEmployer = gross <= 21000 ? (gross * 0.0325) : 0;
+  const bonus       = Number(slip.bonus        || 0);
+  const tds         = Number(slip.tds          || 0);
+  const pfEmp       = Number(slip.pf_employee  || 0);
+  const esiEmp      = Number(slip.esi_employee || 0);
+  const pfEmployer  = Number(slip.pf_employer  || 0);
+  const esiEmployer = Number(slip.esi_employer || 0);
+  // Gross from employee perspective: basic + hra + da + bonus (no employer parts)
+  const gross    = Number(slip.basic) + Number(slip.hra) + Number(slip.da) + bonus;
+  const totalDed = pfEmp + esiEmp + tds + Number(slip.other_deductions || 0);
 
   const handleDownloadPDF = async () => {
     setDownloading(true);
@@ -111,8 +113,7 @@ function SlipDetail({ slip, onClose }) {
             ["Basic",                slip.basic],
             ["House Rent Allowance", slip.hra],
             ["Dearness Allowance",   slip.da],
-            ["Other Allowances",     slip.other_allowances],
-            ["Bonus (8.33%)",        bonus],
+            ["Other (8.33%)",        bonus],
           ].filter(([, v]) => Number(v) > 0).map(([label, val]) => (
             <View key={label} style={D.row}>
               <Text style={D.rowLabel}>{label}</Text>
@@ -121,7 +122,7 @@ function SlipDetail({ slip, onClose }) {
           ))}
           <View style={[D.row, D.totalRow]}>
             <Text style={D.totalLabel}>Gross Earnings</Text>
-            <Text style={D.totalVal}>{fmt(gross + bonus)}</Text>
+            <Text style={D.totalVal}>{fmt(gross)}</Text>
           </View>
         </View>
 
@@ -129,8 +130,8 @@ function SlipDetail({ slip, onClose }) {
         <Text style={D.sectionTitle}>DEDUCTIONS</Text>
         <View style={D.table}>
           {[
-            ["EPF (Employee 12%)",    slip.pf_employee],
-            ["ESIC (Employee 0.75%)", slip.esi_employee],
+            ["EPF (Employee 12%)",    pfEmp],
+            ["ESIC (Employee 0.75%)", esiEmp],
             ["TDS",                   tds],
             ["Other Deductions",      slip.other_deductions],
           ].filter(([, v]) => Number(v) > 0).map(([label, val]) => (
@@ -149,9 +150,8 @@ function SlipDetail({ slip, onClose }) {
         <Text style={D.sectionTitle}>EMPLOYER CONTRIBUTIONS</Text>
         <View style={D.table}>
           {[
-            ["EPF (Employer 12%)",   pfEmployer],
+            ["EPF (Employer 12%)",    pfEmployer],
             ["ESIC (Employer 3.25%)", esiEmployer],
-            ["Bonus / Other (8.33%)", bonus],
           ].filter(([, v]) => v > 0).map(([label, val]) => (
             <View key={label} style={D.row}>
               <Text style={D.rowLabel}>{label}</Text>
@@ -161,7 +161,7 @@ function SlipDetail({ slip, onClose }) {
           <View style={[D.row, D.totalRow]}>
             <Text style={D.totalLabel}>Total Employer Cost</Text>
             <Text style={[D.totalVal, { color: "#15966A" }]}>
-              {fmt(pfEmployer + esiEmployer + bonus)}
+              {fmt(pfEmployer + esiEmployer)}
             </Text>
           </View>
         </View>

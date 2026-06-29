@@ -484,10 +484,12 @@ class MyPayslipsView(APIView):
             .order_by("-payroll_run__year", "-payroll_run__month")
         )
         MONTH_NAMES = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+        from .serializers import _compute_figures
         data = []
         for s in slips:
             m = s.payroll_run.month
             y = s.payroll_run.year
+            gross_ctc, total_d, net, pf_er, esi_er = _compute_figures(s)
             data.append({
                 "id":               s.id,
                 "month":            m,
@@ -507,14 +509,15 @@ class MyPayslipsView(APIView):
                 "basic":            str(s.basic),
                 "hra":              str(s.hra),
                 "da":               str(s.da),
-                "other_allowances": str(s.other_allowances),
-                "gross":            str(s.basic + s.hra + s.da + s.other_allowances),
                 "bonus":            str(s.bonus),
                 "pf_employee":      str(s.pf_employee),
                 "esi_employee":     str(s.esi_employee),
+                "pf_employer":      str(pf_er),
+                "esi_employer":     str(esi_er),
                 "tds":              str(s.tds),
                 "other_deductions": str(s.other_deductions),
-                "net_pay":          str(s.net_pay),
+                "gross_pay":        str(gross_ctc),
+                "net_pay":          str(net),
                 "pdf_url":          request.build_absolute_uri(f"/api/payslips/{s.id}/pdf/"),
             })
         response = Response(data)
