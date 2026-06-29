@@ -34,10 +34,9 @@ def process_check_in(employee, lat, lng, selfie=None):
     now = datetime.now().time()
     h, m = getattr(settings, "LATE_THRESHOLD", (9, 30))
     late_threshold = time(h, m)
-    if geofence_ok:
-        attendance.status = "late" if now > late_threshold else "present"
-    else:
-        attendance.status = "review"
+    # Always mark present/late on check-in regardless of geofence.
+    # geofence_ok is saved as an informational flag visible in the admin panel.
+    attendance.status = "late" if now > late_threshold else "present"
 
     attendance.check_in_time = now
     attendance.save()
