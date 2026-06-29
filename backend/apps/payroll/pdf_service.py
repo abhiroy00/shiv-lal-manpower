@@ -163,12 +163,16 @@ def generate_payslip_pdf(payslip):
 
     centre_tbl = Table([
         [Paragraph(
-            "<font color='#D4AF37'>M/S</font>  SHIV LAL MANPOWER",
+            "<font color='#D4AF37'>M/S</font>  SHIV LAL",
             _s("cn", font="DejaVu-Bold", size=13, color=WHITE,
+               align=TA_CENTER, leading=17),
+        )],        
+        [Paragraph(
+            "<font color='#D4AF37'>SHIV LAL MANPOWER</font>",
+            _s("cn", size=8, color=WHITE,
                align=TA_CENTER, leading=17),
         )],
         [Paragraph(
-            f"<b><font size='14'>PAYSLIP</font></b>"
             f"  <font size='9' color='#AEB9D4'>{mname} {run.year}</font>",
             _s("ps", font="DejaVu-Bold", size=13, color=WHITE,
                align=TA_CENTER, leading=19),

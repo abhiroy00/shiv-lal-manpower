@@ -526,6 +526,9 @@ class CheckInView(APIView):
         except Exception:
             return Response({"detail": "No employee linked to this account."}, status=400)
 
+        if employee is None:
+            return Response({"detail": "No employee linked to this account."}, status=400)
+
         selfie = serializer.validated_data.get("selfie")
         logger.info("[check-in] user=%s parsed selfie=%s",
                     getattr(request.user, "phone", "?"),
@@ -572,6 +575,8 @@ class MyTodayView(APIView):
             emp = request.user.employee
         except Exception:
             return Response({"detail": "No employee linked."}, status=400)
+        if emp is None:
+            return Response({"detail": "No employee linked."}, status=400)
         today = date.today()
         try:
             att = Attendance.objects.get(employee=emp, date=today)
@@ -596,6 +601,8 @@ class CheckOutView(APIView):
             emp = request.user.employee
         except Exception:
             return Response({"detail": "No employee linked."}, status=400)
+        if emp is None:
+            return Response({"detail": "No employee linked."}, status=400)
         today = date.today()
         try:
             att = Attendance.objects.get(employee=emp, date=today)
@@ -616,6 +623,8 @@ class MyAttendanceView(APIView):
         try:
             emp = request.user.employee
         except Exception:
+            return Response({"detail": "No employee linked."}, status=400)
+        if emp is None:
             return Response({"detail": "No employee linked."}, status=400)
         today  = date.today()
         year   = int(request.query_params.get("year",  today.year))
@@ -714,6 +723,8 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         try:
             emp = self.request.user.employee
         except Exception:
+            emp = None
+        if emp is None:
             from rest_framework.exceptions import ValidationError
             raise ValidationError("No employee linked to your account.")
         serializer.save(employee=emp)
@@ -744,6 +755,8 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         try:
             emp = request.user.employee
         except Exception:
+            emp = None
+        if emp is None:
             return Response({"detail": "No employee linked."}, status=400)
         if leave.employee != emp:
             return Response({"detail": "You can only cancel your own leave requests."}, status=403)
@@ -761,6 +774,8 @@ class LeaveBalanceView(APIView):
         try:
             emp = request.user.employee
         except Exception:
+            return Response({"detail": "No employee linked."}, status=400)
+        if emp is None:
             return Response({"detail": "No employee linked."}, status=400)
 
         current_year = date.today().year
