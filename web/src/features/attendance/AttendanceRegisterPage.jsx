@@ -22,6 +22,8 @@ const CODE_STYLE = {
 };
 
 function pad(n) { return String(n).padStart(2, "0"); }
+// Use local date formatting — toISOString() shifts to UTC and drops the last day in IST (+5:30)
+function localDate(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 
 export default function AttendanceRegisterPage() {
   const [month, setMonth]   = useState(TODAY.getMonth() + 1);
@@ -77,9 +79,8 @@ export default function AttendanceRegisterPage() {
   const applyPreset = (months) => {
     const end   = new Date(year, month - 1 + 1, 0); // last day of selected month
     const start = new Date(year, month - 1 - (months - 1), 1); // first day, N months back
-    const fmt   = (d) => d.toISOString().split("T")[0];
-    setBulkFrom(fmt(start));
-    setBulkTo(fmt(end));
+    setBulkFrom(localDate(start));
+    setBulkTo(localDate(end));
   };
 
   const countWorkingDays = (from, to) => {
@@ -112,9 +113,8 @@ export default function AttendanceRegisterPage() {
 
   const openBulkFill = () => {
     // Default to current viewed month
-    const fmt = (d) => d.toISOString().split("T")[0];
-    setBulkFrom(fmt(new Date(year, month - 1, 1)));
-    setBulkTo(fmt(new Date(year, month, 0)));
+    setBulkFrom(localDate(new Date(year, month - 1, 1)));
+    setBulkTo(localDate(new Date(year, month, 0)));
     setBulkStatus("present");
     setBulkScope("all");
     setBulkOverwrite(true);
@@ -126,7 +126,7 @@ export default function AttendanceRegisterPage() {
     const monthName = MONTHS[month - 1];
     const wdCount = countWorkingDays(
       `${year}-${pad(month)}-01`,
-      new Date(year, month, 0).toISOString().split("T")[0],
+      localDate(new Date(year, month, 0)),
     );
     const confirmed = window.confirm(
       `Mark ALL active employees as Present for every working day in ${monthName} ${year}?\n\n` +
@@ -136,7 +136,7 @@ export default function AttendanceRegisterPage() {
     try {
       const res = await bulkFill({
         from_date:    `${year}-${pad(month)}-01`,
-        to_date:      new Date(year, month, 0).toISOString().split("T")[0],
+        to_date:      localDate(new Date(year, month, 0)),
         status:       "present",
         employee_ids: [],   // all active
         overwrite:    true,
