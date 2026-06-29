@@ -63,9 +63,10 @@ def run_payroll(month, year, user):
             esi   = (basic_pay   * ESI_RATE).quantize(Decimal("0.01"))
             tds   = Decimal("0.00")
 
-        # Net = employee earnings − employee deductions only.
-        # Bonus is accrued (shown in CTC gross) but not paid out monthly.
-        net = (basic_pay + hra_pay + da_pay + other_pay - pf - esi - tds).quantize(Decimal("0.01"))
+        # Net = basic + hra + da − employee-side deductions only.
+        # other_allowances is not rendered in the payslip and excluded from net.
+        # Bonus appears on both sides of the PDF (earnings + accrued deduction) — they cancel.
+        net = (basic_pay + hra_pay + da_pay - pf - esi - tds).quantize(Decimal("0.01"))
 
         _, was_created = Payslip.objects.update_or_create(
             payroll_run=run,

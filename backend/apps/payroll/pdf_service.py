@@ -258,7 +258,7 @@ def generate_payslip_pdf(payslip):
     esi_emp = float(payslip.esi_employee)
     tds_amt = float(payslip.tds)
     other_d = float(payslip.other_deductions)
-    net     = float(payslip.net_pay)
+    # net is computed below from gross_ctc − total_d so PDF always balances
 
     # Employer contributions (for CTC display, not saved in DB)
     pf_er  = round(basic * 0.12,   2)
@@ -268,10 +268,10 @@ def generate_payslip_pdf(payslip):
     pf_mode = bonus > 0
 
     if pf_mode:
-        # CTC Gross = Basic + HRA + DA + Bonus + Employer PF + Employer ESIC
-        gross_ctc = basic + hra + da + bonus + pf_er + esi_er
-        # Gross Deduction = all 4 PF/ESIC contributions
-        total_d   = pf_emp + pf_er + esi_emp + esi_er + other_d
+        # CTC Gross = Basic + HRA + DA + Employer PF + Employer ESIC + Other
+        gross_ctc = basic + hra + da + pf_er + esi_er + bonus
+        # Gross Deduction includes Other (accrued) so Gross − Deduction = Net Pay
+        total_d   = pf_emp + pf_er + esi_emp + esi_er + bonus + other_d
 
         earn_rows = [
             ("Basic Salary",                       _inr(basic)),
@@ -294,15 +294,13 @@ def generate_payslip_pdf(payslip):
         ]
         if other_d:
             ded_rows.append(("Other Deductions", _inr(other_d)))
-        # total_d includes bonus so: Gross Earning − Gross Deduction = Net Pay
-        total_d = pf_emp + pf_er + esi_emp + esi_er + bonus + other_d
 
         gross_label = "Gross Earning (CTC)"
         ded_label   = "Gross Deduction"
         regime_txt  = "Salary Regime: EPF & ESIC applicable (Basic ≤ ₹30,000) — TDS not deducted."
         regime_clr  = colors.HexColor("#1565C0")
     else:
-        # TDS mode: standard employee gross (no employer contributions, no bonus)
+        # TDS mode: employee gross (no employer contributions, no bonus)
         gross_ctc = basic + hra + da
         total_d   = tds_amt + other_d
 
@@ -321,6 +319,9 @@ def generate_payslip_pdf(payslip):
         ded_label   = "Total Deductions"
         regime_txt  = "Salary Regime: TDS applicable (Basic > ₹30,000) — EPF & ESIC not deducted."
         regime_clr  = PURPLE
+
+    # Net Pay derived from PDF figures — always balances: Gross − Deduction = Net
+    net = round(gross_ctc - total_d, 2)
 
     # Pad both sides to equal row count so the tables align
     max_rows = max(len(earn_rows), len(ded_rows))
