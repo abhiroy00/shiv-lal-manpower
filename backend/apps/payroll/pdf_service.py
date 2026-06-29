@@ -39,7 +39,7 @@ W, H   = A4
 MARGIN = 18 * mm
 
 LOGO_PATH = os.path.join(os.path.dirname(__file__), "shivlal.png")
-QR_URL    = "https://admin.shivlalmanpower.com/"
+QR_URL    = "https://shivlalmanpower.com/"
 
 
 def _inr(v):
@@ -282,7 +282,7 @@ def generate_payslip_pdf(payslip):
         earn_rows += [
             ("EPF – Employer (12%)",    _inr(pf_er)),
             ("ESIC – Employer (3.25%)", _inr(esi_er)),
-            ("Other (8.33%)",           _inr(bonus)),
+            ("Other",           _inr(bonus)),
         ]
 
         ded_rows = [
@@ -290,7 +290,7 @@ def generate_payslip_pdf(payslip):
             ("EPF – Employer (12%)",      _inr(pf_er)),
             ("ESIC – Employee (0.75%)",   _inr(esi_emp)),
             ("ESIC – Employer (3.25%)",   _inr(esi_er)),
-            ("Other – (8.33%)",   _inr(bonus)),
+            ("Other –",   _inr(bonus)),
         ]
         if other_d:
             ded_rows.append(("Other Deductions", _inr(other_d)))
