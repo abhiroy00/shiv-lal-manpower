@@ -105,7 +105,7 @@ def _get_logo_buf():
     return _LOGO_BUF
 
 
-def _draw_watermark(c, doc):
+def _draw_watermark(c, _doc):
     c.saveState()
     try:
         buf = _get_logo_buf()
@@ -274,21 +274,28 @@ def generate_payslip_pdf(payslip):
         total_d   = pf_emp + pf_er + esi_emp + esi_er + other_d
 
         earn_rows = [
-            ("Basic Salary",                _inr(basic)),
-            ("House Rent Allowance",        _inr(hra)),
+            ("Basic Salary",                       _inr(basic)),
+            ("House Rent Allowance",               _inr(hra)),
         ]
         if da > 0:
             earn_rows.append(("Dearness Allowance", _inr(da)))
-        earn_rows.append(("Other  (Bonus @ 8.33% of Basic)", _inr(bonus)))
+        earn_rows += [
+            ("EPF – Employer (12% of Basic)",    _inr(pf_er)),
+            ("ESIC – Employer (3.25% of Basic)", _inr(esi_er)),
+            ("Other (8.33% of Basic)",           _inr(bonus)),
+        ]
 
         ded_rows = [
-            ("EPF – Employee (12% of Basic)",    _inr(pf_emp)),
-            ("EPF – Employer (12% of Basic)",    _inr(pf_er)),
-            ("ESIC – Employee (0.75% of Basic)", _inr(esi_emp)),
-            ("ESIC – Employer (3.25% of Basic)", _inr(esi_er)),
+            ("EPF – Employee (12% of Basic)",      _inr(pf_emp)),
+            ("EPF – Employer (12% of Basic)",      _inr(pf_er)),
+            ("ESIC – Employee (0.75% of Basic)",   _inr(esi_emp)),
+            ("ESIC – Employer (3.25% of Basic)",   _inr(esi_er)),
+            ("Other – Accrued (8.33% of Basic)",   _inr(bonus)),
         ]
         if other_d:
             ded_rows.append(("Other Deductions", _inr(other_d)))
+        # total_d includes bonus so: Gross Earning − Gross Deduction = Net Pay
+        total_d = pf_emp + pf_er + esi_emp + esi_er + bonus + other_d
 
         gross_label = "Gross Earning (CTC)"
         ded_label   = "Gross Deduction"
