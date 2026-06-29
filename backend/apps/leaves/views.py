@@ -133,3 +133,18 @@ class LeaveViewSet(viewsets.ModelViewSet):
         leave.reviewed_at = datetime.now(tz.utc)
         leave.save()
         return Response(LeaveRequestSerializer(leave).data)
+
+    @action(detail=False, methods=["post"], url_path="approve-all", permission_classes=[IsAdminHR])
+    def approve_all(self, request):
+        pending = LeaveRequest.objects.filter(status="pending")
+        count = pending.count()
+        if count == 0:
+            return Response({"detail": "No pending leave requests.", "approved": 0})
+        now = datetime.now(tz.utc)
+        pending.update(
+            status="approved",
+            review_note=request.data.get("note", "Bulk approved"),
+            reviewed_by=request.user,
+            reviewed_at=now,
+        )
+        return Response({"detail": f"{count} leave request(s) approved.", "approved": count})

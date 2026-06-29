@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSelector } from "react-redux";
-import { useGetLeavesQuery, useApproveLeaveMutation, useRejectLeaveMutation } from "./leaveApi";
+import { useGetLeavesQuery, useApproveLeaveMutation, useRejectLeaveMutation, useBulkApproveLeaveMutation } from "./leaveApi";
 
 const LEAVE_TYPES = {
   cl:     { label: "Casual",  color: "#1565C0", bg: "#E3EEF9" },
@@ -115,11 +115,14 @@ export default function LeavePage() {
   const user    = useSelector((s) => s.auth.user);
   const isAdmin = user && ["admin", "hr"].includes(user.role);
 
-  const [statusFilter, setStatusFilter] = useState(isAdmin ? "pending" : "");
-  const [typeFilter,   setTypeFilter]   = useState("");
-  const [search,       setSearch]       = useState("");
-  const [modal,        setModal]        = useState(null); // { leave, action }
-  const [toast,        setToast]        = useState(null);
+  const [statusFilter,   setStatusFilter]   = useState(isAdmin ? "pending" : "");
+  const [typeFilter,     setTypeFilter]     = useState("");
+  const [search,         setSearch]         = useState("");
+  const [modal,          setModal]          = useState(null); // { leave, action }
+  const [toast,          setToast]          = useState(null);
+  const [approvingAll,   setApprovingAll]   = useState(false);
+
+  const [bulkApproveLeaves] = useBulkApproveLeaveMutation();
 
   const { data: raw, isLoading, refetch } = useGetLeavesQuery(
     { status: statusFilter || undefined },
@@ -155,6 +158,20 @@ export default function LeavePage() {
     }
   };
 
+  const handleApproveAll = async () => {
+    if (counts.pending === 0) return;
+    if (!window.confirm(`Approve all ${counts.pending} pending leave request(s)?`)) return;
+    setApprovingAll(true);
+    try {
+      const res = await bulkApproveLeaves().unwrap();
+      showToast(res.detail || `${res.approved} leave(s) approved.`);
+    } catch (e) {
+      showToast(e?.data?.detail || "Bulk approve failed.", false);
+    } finally {
+      setApprovingAll(false);
+    }
+  };
+
   const kpis = [
     { label: "Pending",  value: counts.pending,  color: "#C98A12", bg: "#FBF1DC", filter: "pending"  },
     { label: "Approved", value: counts.approved, color: "#15966A", bg: "#E1F4EC", filter: "approved" },
@@ -176,7 +193,18 @@ export default function LeavePage() {
           <h1 style={S.h1}>{isAdmin ? "Leave Management" : "My Leave Requests"}</h1>
           <p style={S.sub}>{isAdmin ? "Review and action employee leave requests from the mobile app" : "View your leave history submitted via the mobile app"}</p>
         </div>
-        <button style={S.refreshBtn} onClick={refetch}>↻ Refresh</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {isAdmin && counts.pending > 0 && (
+            <button
+              style={S.approveAllBtn}
+              onClick={handleApproveAll}
+              disabled={approvingAll}
+            >
+              {approvingAll ? "Approving…" : `✅ Approve All Pending (${counts.pending})`}
+            </button>
+          )}
+          <button style={S.refreshBtn} onClick={refetch}>↻ Refresh</button>
+        </div>
       </div>
 
       {/* KPI strip */}
@@ -338,7 +366,8 @@ const S = {
   pageHead:    { display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 16 },
   h1:          { fontFamily: "Archivo", fontSize: 22, fontWeight: 700, color: "#0F1E3D" },
   sub:         { fontSize: 13, color: "#6B7793", marginTop: 3 },
-  refreshBtn:  { padding: "9px 16px", border: "1px solid #E2E7F0", borderRadius: 9, background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#0F1E3D" },
+  refreshBtn:      { padding: "9px 16px", border: "1px solid #E2E7F0", borderRadius: 9, background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#0F1E3D" },
+  approveAllBtn:   { padding: "9px 18px", border: 0, borderRadius: 9, background: "#15966A", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" },
 
   kpiRow:      { display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" },
   kpiCard:     { flex: "1 1 160px", background: "#fff", border: "1px solid #E2E7F0", borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", transition: "border .15s" },
