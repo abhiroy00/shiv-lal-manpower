@@ -27,6 +27,7 @@ export default function PayrollPage() {
   const [year, setYear]             = useState(now.getFullYear());
   const [selectedRun, setSelectedRun] = useState(null);
   const [toast, setToast]           = useState(null);
+  const [search, setSearch]         = useState("");
 
   const accessToken = useSelector((s) => s.auth.accessToken);
 
@@ -37,7 +38,15 @@ export default function PayrollPage() {
     { payroll_run: selectedRun?.id },
     { skip: !selectedRun }
   );
-  const payslips = payslipsData?.results || payslipsData || [];
+  const allPayslips = payslipsData?.results || payslipsData || [];
+  const q = search.trim().toLowerCase();
+  const payslips = q
+    ? allPayslips.filter((p) =>
+        p.employee_name?.toLowerCase().includes(q) ||
+        p.emp_code?.toLowerCase().includes(q) ||
+        p.designation?.toLowerCase().includes(q)
+      )
+    : allPayslips;
 
   const [runPayroll,  { isLoading: running }]     = useRunPayrollMutation();
   const [approveRun,  { isLoading: approving }]   = useApprovePayrollRunMutation();
@@ -252,6 +261,27 @@ export default function PayrollPage() {
               ))}
             </div>
 
+            <div style={S.searchRow}>
+              <div style={S.searchWrap}>
+                <span style={S.searchIcon}>🔍</span>
+                <input
+                  type="text"
+                  placeholder="Search employee, code or designation…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={S.searchInput}
+                />
+                {search && (
+                  <span style={S.searchClear} onClick={() => setSearch("")}>✕</span>
+                )}
+              </div>
+              {q && (
+                <div style={S.searchCount}>
+                  {payslips.length} of {allPayslips.length} employees
+                </div>
+              )}
+            </div>
+
             <div style={S.tableWrap}>
               <table style={S.table}>
                 <thead>
@@ -353,5 +383,11 @@ const S = {
   structTitle:{ fontSize: 12, fontWeight: 700, color: "#0F1E3D", marginBottom: 2 },
   structBtn:  { padding: "7px 10px", border: "1px solid #E2E7F0", borderRadius: 8, background: "#F4F6FA", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#1E3563", textAlign: "center" },
   structUploadBtn: { padding: "7px 10px", border: "1px solid #15966A", borderRadius: 8, background: "#E1F4EC", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#15966A", textAlign: "center" },
-  structNote: { fontSize: 10.5, color: "#7B1FA2", lineHeight: 1.5, background: "#F3E5F5", borderRadius: 6, padding: "5px 8px" },
+  structNote:  { fontSize: 10.5, color: "#7B1FA2", lineHeight: 1.5, background: "#F3E5F5", borderRadius: 6, padding: "5px 8px" },
+  searchRow:   { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
+  searchWrap:  { position: "relative", display: "flex", alignItems: "center", flex: 1, minWidth: 220 },
+  searchIcon:  { position: "absolute", left: 11, fontSize: 13, pointerEvents: "none" },
+  searchInput: { width: "100%", padding: "9px 32px 9px 34px", border: "1px solid #E2E7F0", borderRadius: 9, fontSize: 13, fontFamily: "inherit", outline: "none", background: "#fff" },
+  searchClear: { position: "absolute", right: 10, fontSize: 12, color: "#9AA6BF", cursor: "pointer", fontWeight: 700 },
+  searchCount: { fontSize: 12, color: "#6B7793", whiteSpace: "nowrap" },
 };
