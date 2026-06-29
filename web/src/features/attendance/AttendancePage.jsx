@@ -65,6 +65,7 @@ function SelfieLightbox({ record, onClose }) {
 // ── Main page ─────────────────────────────────────────────────
 export default function AttendancePage() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [search, setSearch] = useState("");
   const [lightbox, setLightbox] = useState(null);
   const [selected, setSelected] = useState([]);
   const [selfieMsg, setSelfieMsg] = useState(null);
@@ -76,13 +77,20 @@ export default function AttendancePage() {
   const { data, isLoading } = useGetAttendanceQuery({ date });
   const [deleteSelfies, { isLoading: deletingSelfies }] = useDeleteSelfiesMutation();
 
-  const records = data?.results || [];
+  const allRecords = data?.results || [];
+  const q = search.trim().toLowerCase();
+  const records = q
+    ? allRecords.filter((r) =>
+        r.employee_name?.toLowerCase().includes(q) ||
+        r.emp_code?.toLowerCase().includes(q)
+      )
+    : allRecords;
 
   const selfieIds    = records.filter((r) => r.selfie_url).map((r) => r.id);
   const selfieCount  = selfieIds.length;
   const allSelected  = selfieCount > 0 && selfieIds.every((id) => selected.includes(id));
 
-  const changeDate = (v) => { setDate(v); setSelected([]); setSelfieMsg(null); };
+  const changeDate = (v) => { setDate(v); setSelected([]); setSelfieMsg(null); setSearch(""); };
 
   const toggleOne = (id) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -133,6 +141,16 @@ export default function AttendancePage() {
           <p style={S.sub}>Every check-in is geo-tagged and face-verified</p>
         </div>
         <div style={S.actions}>
+          <div style={S.searchWrap}>
+            <span style={S.searchIcon}>🔍</span>
+            <input
+              type="text"
+              placeholder="Search employee…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={S.searchInput}
+            />
+          </div>
           <input type="date" style={S.datePicker} value={date}
             onChange={(e) => changeDate(e.target.value)} />
         </div>
@@ -267,8 +285,11 @@ const S = {
   pageHead:   { display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 12 },
   h1:         { fontFamily: "Archivo", fontSize: 22, fontWeight: 700, color: "#0F1E3D" },
   sub:        { fontSize: 13, color: "#6B7793", marginTop: 3 },
-  actions:    { display: "flex", gap: 9 },
-  datePicker: { padding: "9px 12px", border: "1px solid #E2E7F0", borderRadius: 9, fontSize: 13, fontFamily: "inherit" },
+  actions:     { display: "flex", gap: 9, alignItems: "center" },
+  searchWrap:  { position: "relative", display: "flex", alignItems: "center" },
+  searchIcon:  { position: "absolute", left: 10, fontSize: 13, pointerEvents: "none" },
+  searchInput: { padding: "9px 12px 9px 32px", border: "1px solid #E2E7F0", borderRadius: 9, fontSize: 13, fontFamily: "inherit", width: 200, outline: "none" },
+  datePicker:  { padding: "9px 12px", border: "1px solid #E2E7F0", borderRadius: 9, fontSize: 13, fontFamily: "inherit" },
   kpiGrid:    { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 16 },
   kpi:        { background: "#fff", border: "1px solid #E2E7F0", borderRadius: 14, padding: 16 },
   kpiLabel:   { fontSize: 12, color: "#6B7793", fontWeight: 600 },
