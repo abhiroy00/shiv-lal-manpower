@@ -35,18 +35,10 @@ export default function PayrollPage() {
   const runs = runsData?.results || runsData || [];
 
   const { data: payslipsData, isLoading: slipsLoading } = useGetPayslipsQuery(
-    { payroll_run: selectedRun?.id },
+    { payroll_run: selectedRun?.id, ...(search.trim() ? { search: search.trim() } : {}) },
     { skip: !selectedRun }
   );
-  const allPayslips = payslipsData?.results || payslipsData || [];
-  const q = search.trim().toLowerCase();
-  const payslips = q
-    ? allPayslips.filter((p) =>
-        p.employee_name?.toLowerCase().includes(q) ||
-        p.emp_code?.toLowerCase().includes(q) ||
-        p.designation?.toLowerCase().includes(q)
-      )
-    : allPayslips;
+  const payslips = payslipsData?.results || payslipsData || [];
 
   const [runPayroll,  { isLoading: running }]     = useRunPayrollMutation();
   const [approveRun,  { isLoading: approving }]   = useApprovePayrollRunMutation();
@@ -275,9 +267,9 @@ export default function PayrollPage() {
                   <span style={S.searchClear} onClick={() => setSearch("")}>✕</span>
                 )}
               </div>
-              {q && (
+              {search.trim() && (
                 <div style={S.searchCount}>
-                  {payslips.length} of {allPayslips.length} employees
+                  {payslips.length} employees found
                 </div>
               )}
             </div>

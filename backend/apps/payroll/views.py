@@ -449,8 +449,9 @@ class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PayslipSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ["payroll_run", "employee"]
+    search_fields = ["employee__full_name", "employee__emp_code", "employee__designation"]
     ordering = ["employee__emp_code"]
-    pagination_class = None  # always filtered by payroll_run, so full list is safe
+    pagination_class = None  # always filtered by payroll_run, bounded per run
 
     @action(detail=True, methods=["get"], url_path="pdf")
     def pdf(self, request, pk=None):
